@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
 
 type GroceryType = Database['public']['Tables']['grocery_types']['Row'];
-type GroceryCategory = Database['public']['Tables']['grocery_categories']['Row'];
+
 
 export const pantryService = {
 

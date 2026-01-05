@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Database } from '../types/supabase';
+
 
 export const listService = {
 
