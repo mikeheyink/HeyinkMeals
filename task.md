@@ -1,0 +1,42 @@
+# Tasks
+
+- [ ] Project Initialization
+    - [x] Create implementation plan
+    - [x] Define technology stack and requirements
+    - [x] Set up project structure
+- [ ] Core Domain (Models & Logic)
+    - [x] Define User Stories
+    - [x] Define TypeScript Interfaces (Recipe, Meal, ShoppingList)
+    - [x] Setup Supabase Project (Database)
+    - [x] Create Database Tables (SQL)
+    - [x] 1. Implement Pantry Logic (Groceries)
+        - [x] Service Implementation
+        - [x] Automated Verification
+    - [x] 2. Implement Lists & Recipes Logic
+        - [x] List Service & Tests
+        - [x] Recipe Service & Tests
+    - [x] 3. Implement Planning Logic
+        - [x] Planner Service & Tests
+    - [x] Implement Shopping List Generator
+    - [x] Unit Tests for Logic
+- [ ] UI Implementation (Systematic)
+    - [x] 0. Core UI Setup (Layout, Theme, Router)
+    - [x] 1. Pantry UI (Ingredients Library)
+        - [x] Ingredients Page (List & Add)
+        - [x] Implement Edit Ingredient functionality
+        - [x] Implement Delete Ingredient functionality
+    - [ ] 2. Recipes & Lists UI
+        - [/] Recipe List Page
+        - [ ] Recipe Details/Edit Page
+    - [ ] 3. Planner & Shopping UI
+        - [x] Calendar View
+        - [ ] Shopping List View (Persistent Status)
+        - [x] Fix Planner Dropdown Logic
+        - [ ] Implement Shopping List Record Creation on Meal Add
+        - [ ] Implement Status Toggles (In Stock / Purchased)
+        - [ ] Implement Archiving Logic
+- [ ] Design Overhaul (Celestial Minimal)
+    - [ ] Update Design Tokens (index.css)
+    - [ ] Refactor UI Components (Button, Card)
+    - [ ] Refine Page Layouts & Aesthetics
+    - [ ] Final Design Polish
