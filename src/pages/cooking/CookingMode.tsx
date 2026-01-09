@@ -4,8 +4,9 @@ import { supabase } from '../../lib/supabase';
 import { recipeService } from '../../services/recipeService';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { ChevronLeft, Timer, ChefHat, CheckCircle2, Play, Pause, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Timer, ChefHat, CheckCircle2, Play, Pause, RotateCcw, List, BookOpen } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 
 export const CookingMode = () => {
     const { mealId } = useParams();
@@ -14,6 +15,8 @@ export const CookingMode = () => {
     const [recipe, setRecipe] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set());
+    const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions'>('ingredients');
+    const isMobile = useIsMobile();
 
     // Timer state
     const [timeLeft, setTimeLeft] = useState(0);
@@ -92,8 +95,34 @@ export const CookingMode = () => {
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Mobile Tab Navigation */}
+                {isMobile && (
+                    <div className="flex p-1 bg-base-200 rounded-xl">
+                        <button
+                            onClick={() => setActiveTab('ingredients')}
+                            className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'ingredients'
+                                    ? 'bg-white shadow-sm text-accent'
+                                    : 'text-ink-500'
+                                }`}
+                        >
+                            <List size={16} />
+                            Ingredients
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('instructions')}
+                            className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'instructions'
+                                    ? 'bg-white shadow-sm text-accent'
+                                    : 'text-ink-500'
+                                }`}
+                        >
+                            <BookOpen size={16} />
+                            Instructions
+                        </button>
+                    </div>
+                )}
+
                 {/* Ingredients / Mise en Place */}
-                <div className="lg:col-span-1 space-y-6">
+                <div className={`lg:col-span-1 space-y-6 ${isMobile && activeTab !== 'ingredients' ? 'hidden' : ''}`}>
                     <div>
                         <h2 className="section-title flex items-center gap-2">
                             <CheckCircle2 size={12} />
@@ -107,11 +136,11 @@ export const CookingMode = () => {
                                 >
                                     <input
                                         type="checkbox"
-                                        className="mt-1 rounded border-base-300 text-accent focus:ring-accent"
+                                        className="mt-0.5 w-5 h-5 rounded border-base-300 text-accent focus:ring-accent"
                                         checked={checkedIngredients.has(item.id)}
                                         onChange={() => toggleIngredient(item.id)}
                                     />
-                                    <div className="text-sm">
+                                    <div className="text-sm sm:text-base">
                                         <span className="font-semibold">{item.quantity} {item.unit}</span>
                                         <span className="ml-1 text-ink-700">{item.grocery_type?.name}</span>
                                     </div>
@@ -165,7 +194,7 @@ export const CookingMode = () => {
                 </div>
 
                 {/* Instructions */}
-                <div className="lg:col-span-2 space-y-6">
+                <div className={`lg:col-span-2 space-y-6 ${isMobile && activeTab !== 'instructions' ? 'hidden' : ''}`}>
                     <div>
                         <h2 className="section-title flex items-center gap-2">
                             <ChefHat size={12} />
@@ -185,6 +214,34 @@ export const CookingMode = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Mobile Sticky Timer */}
+            {isMobile && (isTimerRunning || timeLeft > 0) && (
+                <div className="fixed bottom-20 left-2 right-2 bg-ink-900 text-white rounded-xl shadow-2xl p-4 flex items-center justify-between z-50">
+                    <div className="text-3xl font-mono font-bold">
+                        {formatTime(timeLeft)}
+                    </div>
+                    <div className="flex gap-2">
+                        {isTimerRunning ? (
+                            <Button onClick={() => setIsTimerRunning(false)} variant="secondary" size="sm">
+                                <Pause size={16} fill="currentColor" />
+                            </Button>
+                        ) : (
+                            <Button onClick={startTimer} size="sm" className="bg-white text-ink-900">
+                                <Play size={16} fill="currentColor" />
+                            </Button>
+                        )}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-white/40 hover:text-white"
+                            onClick={() => { setTimeLeft(0); setIsTimerRunning(false); }}
+                        >
+                            <RotateCcw size={16} />
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

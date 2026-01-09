@@ -52,11 +52,9 @@ async function clearAllData() {
     const { error: e6 } = await supabase
         .from('grocery_types')
         .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000')
-        .not('name', 'ilike', '%take-away%')
-        .not('name', 'ilike', '%eating out%');
+        .neq('id', '00000000-0000-0000-0000-000000000000');
     if (e6) console.error('  Error:', e6.message);
-    else console.log('  ✅ Done (preserved Take-away and Eating out)');
+    else console.log('  ✅ Done');
 
     // 7. Stores
     console.log('Deleting stores...');

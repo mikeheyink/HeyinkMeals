@@ -40,3 +40,13 @@
     - [ ] Refactor UI Components (Button, Card)
     - [ ] Refine Page Layouts & Aesthetics
     - [ ] Final Design Polish
+- [x] Deployment
+    - [x] Configure Project for Vercel (tsconfig, types, vercel.json)
+    - [x] Push to GitHub
+    - [x] Deploy to Vercel
+- [ ] Data Population
+    - [x] Import Grocery Lists
+    - [ ] Import Stores
+    - [x] Import Grocery Types
+    - [ ] Import Recipes
+    - [ ] Import Meal Plans

@@ -119,3 +119,46 @@
 ::-webkit-scrollbar-thumb {
     @apply bg-ink-300 rounded-full hover:bg-ink-500 transition-colors;
 }
+
+/* Mobile-First Utilities */
+@layer utilities {
+
+    /* Touch-friendly targets (minimum 44px as per Apple HIG) */
+    .touch-target {
+        @apply min-h-[44px] min-w-[44px];
+    }
+
+    /* Safe area for notched devices */
+    .safe-area-bottom {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    .safe-area-top {
+        padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    /* Hide scrollbar but allow scroll */
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Mobile-optimized text sizes */
+    .text-responsive {
+        @apply text-base sm:text-sm;
+    }
+
+    /* Full-width tap area */
+    .tap-area-full {
+        @apply relative;
+    }
+
+    .tap-area-full::before {
+        content: '';
+        @apply absolute -inset-2;
+    }
+}

@@ -32,6 +32,21 @@ async function inspectData() {
         });
         console.log(counts);
     }
+
+    console.log('\n--- Grocery Lists (First 20) ---');
+    const { data: lists, error: listError } = await supabase.from('grocery_lists').select('id, name').limit(20);
+    if (listError) console.error(listError);
+    else console.log(lists);
+
+    console.log('\n--- Recipes (First 5 with Link) ---');
+    const { data: recipes, error: recipeError } = await supabase
+        .from('recipes')
+        .select('name, ingredients_list_id')
+        .not('ingredients_list_id', 'is', null)
+        .limit(5);
+
+    if (recipeError) console.error(recipeError);
+    else console.log(recipes);
 }
 
 inspectData();

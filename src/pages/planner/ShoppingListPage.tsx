@@ -156,7 +156,7 @@ export const ShoppingListPage = () => {
                         All items are secured.
                     </div>
                 ) : (
-                    Object.entries(activeGrouped).map(([category, catItems]: [string, any]) => (
+                    Object.entries(activeGrouped).sort(([a], [b]) => a.localeCompare(b)).map(([category, catItems]: [string, any]) => (
                         <div key={category} className="space-y-1">
                             <h2 className="section-title">
                                 {category}
@@ -186,7 +186,7 @@ export const ShoppingListPage = () => {
 
                     {inStockExpanded && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                            {Object.entries(inStockGrouped).map(([category, catItems]: [string, any]) => (
+                            {Object.entries(inStockGrouped).sort(([a], [b]) => a.localeCompare(b)).map(([category, catItems]: [string, any]) => (
                                 <div key={category} className="space-y-1">
                                     <h3 className="text-[9px] font-bold uppercase tracking-tight text-ink-300 px-2 opacity-60">
                                         {category}
@@ -218,7 +218,7 @@ export const ShoppingListPage = () => {
 
                     {orderedExpanded && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                            {Object.entries(orderedGrouped).map(([category, catItems]: [string, any]) => (
+                            {Object.entries(orderedGrouped).sort(([a], [b]) => a.localeCompare(b)).map(([category, catItems]: [string, any]) => (
                                 <div key={category} className="space-y-1">
                                     <h3 className="text-[9px] font-bold uppercase tracking-tight text-ink-300 px-2 opacity-60">
                                         {category}

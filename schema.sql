@@ -85,3 +85,11 @@ create table shopping_list_items (
   is_archived boolean default false,
   created_at timestamptz default now()
 );
+
+-- 7. User Preferences (single user for now)
+create table user_preferences (
+  id uuid primary key default uuid_generate_v4(),
+  key text not null unique,
+  value jsonb not null,
+  updated_at timestamptz default now()
+);
