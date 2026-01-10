@@ -13,6 +13,15 @@ export const listService = {
         return data;
     },
 
+    async getAllLists() {
+        const { data, error } = await supabase
+            .from('grocery_lists')
+            .select('id, name')
+            .order('name');
+        if (error) throw error;
+        return data;
+    },
+
     async addListItem(listId: string, groceryTypeId: string, quantity: number, unit: string) {
         const { data, error } = await supabase
             .from('grocery_list_items')

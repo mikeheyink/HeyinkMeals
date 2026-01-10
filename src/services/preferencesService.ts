@@ -64,5 +64,19 @@ export const preferencesService = {
      */
     async setPlannerConfig(config: PlannerConfigItem[]): Promise<boolean> {
         return this.setPreference('planner_config', config);
+    },
+
+    /**
+     * Get the planner viewport anchor date (first visible day)
+     */
+    async getPlannerViewportAnchor(): Promise<string | null> {
+        return this.getPreference<string>('planner_viewport_anchor');
+    },
+
+    /**
+     * Save the planner viewport anchor date
+     */
+    async setPlannerViewportAnchor(dateStr: string): Promise<boolean> {
+        return this.setPreference('planner_viewport_anchor', dateStr);
     }
 };

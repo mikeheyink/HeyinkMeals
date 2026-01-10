@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { plannerService } from '../../services/plannerService';
 import { preferencesService } from '../../services/preferencesService';
 import type { PlannerConfigItem } from '../../services/preferencesService';
-import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Plus, X, ChevronUp, ChevronDown, Settings } from 'lucide-react';
-import { format, addDays, startOfDay } from 'date-fns';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { Plus, X, ChevronUp, ChevronDown, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, addDays, startOfDay, parseISO, isToday } from 'date-fns';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { MobilePlannerView } from '../../components/MobilePlannerView';
 import { useIsMobile } from '../../hooks/useMediaQuery';
+import { AddRecipeModal } from '../../components/AddRecipeModal';
 
 const DEFAULT_PLANNER_CONFIG: PlannerConfigItem[] = [
     { id: 'Everyone', slots: ['Breakfast', 'Lunch', 'Dinner'] },
@@ -30,11 +31,28 @@ export const PlannerPage = () => {
     // Customization Settings - load from database
     const [plannerConfig, setPlannerConfig] = useState<PlannerConfigItem[]>(DEFAULT_PLANNER_CONFIG);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false);
+    const [pendingDesktopSlot, setPendingDesktopSlot] = useState<{ date: Date; meal: string } | null>(null);
+
+    // Viewport anchor state - the date from which the 11-day window starts
+    const [anchorDate, setAnchorDate] = useState<Date>(startOfDay(new Date()));
+    const [isLoadingAnchor, setIsLoadingAnchor] = useState(true);
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Check if current view contains today
+    const viewContainsToday = days.some(d => isToday(d));
 
     // Load preferences from database on mount
     useEffect(() => {
-        preferencesService.getPlannerConfig().then(config => {
+        Promise.all([
+            preferencesService.getPlannerConfig(),
+            preferencesService.getPlannerViewportAnchor()
+        ]).then(([config, anchor]) => {
             setPlannerConfig(config);
+            if (anchor) {
+                setAnchorDate(parseISO(anchor));
+            }
+            setIsLoadingAnchor(false);
         });
     }, []);
 
@@ -44,13 +62,44 @@ export const PlannerPage = () => {
         preferencesService.setPlannerConfig(newConfig);
     };
 
+    // Debounced save of anchor date
+    const saveAnchorDebounced = useCallback((date: Date) => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        saveTimeoutRef.current = setTimeout(() => {
+            preferencesService.setPlannerViewportAnchor(format(date, 'yyyy-MM-dd'));
+        }, 500);
+    }, []);
 
+    // Generate days from anchor date
     useEffect(() => {
-        const today = startOfDay(new Date());
-        const week = Array.from({ length: 11 }, (_, i) => addDays(today, i));
+        if (isLoadingAnchor) return;
+        const week = Array.from({ length: 11 }, (_, i) => addDays(anchorDate, i));
         setDays(week);
         loadData(week[0], week[10]);
-    }, []);
+    }, [anchorDate, isLoadingAnchor]);
+
+    // Navigation handlers
+    const navigateWeek = (direction: 'prev' | 'next') => {
+        const offset = direction === 'prev' ? -7 : 7;
+        const newAnchor = startOfDay(addDays(anchorDate, offset));
+        setAnchorDate(newAnchor);
+        saveAnchorDebounced(newAnchor);
+    };
+
+    const jumpToToday = () => {
+        const today = startOfDay(new Date());
+        setAnchorDate(today);
+        saveAnchorDebounced(today);
+    };
+
+    const refreshRecipes = async () => {
+        const recipeData = await plannerService.getRecipesWithListNames();
+        if (recipeData) {
+            setRecipes(recipeData);
+        }
+    };
 
     const loadData = async (start: Date, end: Date) => {
         try {
@@ -59,11 +108,7 @@ export const PlannerPage = () => {
             const p = await plannerService.getPlanForRange(startStr, endStr);
             setPlans(p || []);
 
-            const { data } = await supabase.from('recipes').select('id, name');
-            if (data) {
-                setRecipes(data);
-                if (data.length > 0 && !selectedRecipe) setSelectedRecipe(data[0].id);
-            }
+            await refreshRecipes();
         } catch (e) {
             console.error(e);
         }
@@ -126,135 +171,182 @@ export const PlannerPage = () => {
         }
     };
 
+    const handleRecipeCreated = async (recipeId: string) => {
+        await refreshRecipes();
+
+        if (pendingDesktopSlot) {
+            const [dinerId, slot] = pendingDesktopSlot.meal.split('-');
+            if (dinerId && slot) {
+                await handleAddMeal(pendingDesktopSlot.date, slot, dinerId, recipeId);
+            }
+            setPendingDesktopSlot(null);
+            setAddingTo(null);
+            setSelectedRecipe('');
+        }
+
+        setIsAddRecipeModalOpen(false);
+    };
+
     return (
         <div className="space-y-8">
             <PageHeader
                 title="Meal Planner"
                 subtitle={`${format(days[0] || new Date(), 'MMM d')} — ${format(days[10] || new Date(), 'MMM d')}`}
                 actions={
-                    <div className="relative">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                            icon={Settings}
-                        >
-                            <span className="hidden sm:inline">Customize View</span>
-                            <span className="sm:hidden">Settings</span>
-                        </Button>
+                    <div className="flex items-center gap-2">
+                        {/* Week Navigation */}
+                        <div className="flex items-center gap-1 bg-base-200/60 rounded-lg p-1">
+                            <button
+                                onClick={() => navigateWeek('prev')}
+                                className="p-1.5 rounded-md hover:bg-base-300 transition-colors text-ink-500 hover:text-ink-900"
+                                title="Previous week"
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
+                            <button
+                                onClick={jumpToToday}
+                                className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${viewContainsToday
+                                    ? 'bg-accent text-white'
+                                    : 'hover:bg-base-300 text-ink-500 hover:text-ink-900'
+                                    }`}
+                                title="Jump to today"
+                            >
+                                Today
+                            </button>
+                            <button
+                                onClick={() => navigateWeek('next')}
+                                className="p-1.5 rounded-md hover:bg-base-300 transition-colors text-ink-500 hover:text-ink-900"
+                                title="Next week"
+                            >
+                                <ChevronRight size={18} />
+                            </button>
+                        </div>
 
-                        {isSettingsOpen && (
-                            <>
-                                {/* Mobile: Full-screen bottom sheet */}
-                                {isMobile ? (
-                                    <div className="fixed inset-0 z-50">
-                                        {/* Backdrop */}
-                                        <div
-                                            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                                            onClick={() => setIsSettingsOpen(false)}
-                                        />
-                                        {/* Bottom Sheet */}
-                                        <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl p-6 pb-8 safe-area-bottom animate-in slide-in-from-bottom duration-200">
-                                            <div className="w-12 h-1 bg-base-300 rounded-full mx-auto mb-6" />
-                                            <h4 className="text-lg font-bold text-ink-900 mb-4">Customize View</h4>
-                                            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                                                {plannerConfig.map((item, idx) => (
-                                                    <div key={item.id} className="space-y-3 p-4 rounded-xl bg-base-200/50 border border-base-300/50">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-base font-bold text-ink-900">{item.id}</span>
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    disabled={idx === 0}
-                                                                    onClick={() => moveItem(idx, 'up')}
-                                                                    className="p-2 hover:bg-base-300 rounded-lg disabled:opacity-20 touch-target"
-                                                                >
-                                                                    <ChevronUp size={20} />
-                                                                </button>
-                                                                <button
-                                                                    disabled={idx === plannerConfig.length - 1}
-                                                                    onClick={() => moveItem(idx, 'down')}
-                                                                    className="p-2 hover:bg-base-300 rounded-lg disabled:opacity-20 touch-target"
-                                                                >
-                                                                    <ChevronDown size={20} />
-                                                                </button>
+                        {/* Settings */}
+                        <div className="relative">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                                icon={Settings}
+                            >
+                                <span className="hidden sm:inline">Customize View</span>
+                                <span className="sm:hidden">Settings</span>
+                            </Button>
+
+                            {isSettingsOpen && (
+                                <>
+                                    {/* Mobile: Full-screen bottom sheet */}
+                                    {isMobile ? (
+                                        <div className="fixed inset-0 z-50">
+                                            {/* Backdrop */}
+                                            <div
+                                                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                                                onClick={() => setIsSettingsOpen(false)}
+                                            />
+                                            {/* Bottom Sheet */}
+                                            <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl p-6 pb-8 safe-area-bottom animate-in slide-in-from-bottom duration-200">
+                                                <div className="w-12 h-1 bg-base-300 rounded-full mx-auto mb-6" />
+                                                <h4 className="text-lg font-bold text-ink-900 mb-4">Customize View</h4>
+                                                <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                                                    {plannerConfig.map((item, idx) => (
+                                                        <div key={item.id} className="space-y-3 p-4 rounded-xl bg-base-200/50 border border-base-300/50">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-base font-bold text-ink-900">{item.id}</span>
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        disabled={idx === 0}
+                                                                        onClick={() => moveItem(idx, 'up')}
+                                                                        className="p-2 hover:bg-base-300 rounded-lg disabled:opacity-20 touch-target"
+                                                                    >
+                                                                        <ChevronUp size={20} />
+                                                                    </button>
+                                                                    <button
+                                                                        disabled={idx === plannerConfig.length - 1}
+                                                                        onClick={() => moveItem(idx, 'down')}
+                                                                        className="p-2 hover:bg-base-300 rounded-lg disabled:opacity-20 touch-target"
+                                                                    >
+                                                                        <ChevronDown size={20} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex gap-3">
+                                                                {allSlots.map(slot => (
+                                                                    <label key={slot} className="flex items-center gap-2 cursor-pointer group flex-1 p-2 rounded-lg hover:bg-base-300 transition-colors">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={item.slots.includes(slot)}
+                                                                            onChange={() => toggleSlot(item.id, slot)}
+                                                                            className="rounded border-base-300 text-accent focus:ring-accent w-5 h-5"
+                                                                        />
+                                                                        <span className="text-sm text-ink-700 font-medium">{slot}</span>
+                                                                    </label>
+                                                                ))}
                                                             </div>
                                                         </div>
-                                                        <div className="flex gap-3">
-                                                            {allSlots.map(slot => (
-                                                                <label key={slot} className="flex items-center gap-2 cursor-pointer group flex-1 p-2 rounded-lg hover:bg-base-300 transition-colors">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={item.slots.includes(slot)}
-                                                                        onChange={() => toggleSlot(item.id, slot)}
-                                                                        className="rounded border-base-300 text-accent focus:ring-accent w-5 h-5"
-                                                                    />
-                                                                    <span className="text-sm text-ink-700 font-medium">{slot}</span>
-                                                                </label>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                    ))}
+                                                </div>
+                                                <div className="pt-4 mt-4 border-t border-base-200">
+                                                    <Button variant="primary" size="lg" className="w-full" onClick={() => setIsSettingsOpen(false)}>
+                                                        Done
+                                                    </Button>
+                                                </div>
                                             </div>
-                                            <div className="pt-4 mt-4 border-t border-base-200">
-                                                <Button variant="primary" size="lg" className="w-full" onClick={() => setIsSettingsOpen(false)}>
+                                        </div>
+                                    ) : (
+                                        /* Desktop: Dropdown */
+                                        <div className="absolute right-0 mt-2 w-72 bg-white border border-base-300 rounded-lg shadow-xl z-50 p-4 space-y-4">
+                                            <div>
+                                                <h4 className="section-title mb-3">Re-order & Configure</h4>
+                                                <div className="space-y-4">
+                                                    {plannerConfig.map((item, idx) => (
+                                                        <div key={item.id} className="space-y-2 p-2 rounded-md bg-base-200/50 border border-base-300/50">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-bold text-ink-900">{item.id}</span>
+                                                                <div className="flex gap-1">
+                                                                    <button
+                                                                        disabled={idx === 0}
+                                                                        onClick={() => moveItem(idx, 'up')}
+                                                                        className="p-1 hover:bg-base-300 rounded disabled:opacity-20"
+                                                                    >
+                                                                        <ChevronUp size={14} />
+                                                                    </button>
+                                                                    <button
+                                                                        disabled={idx === plannerConfig.length - 1}
+                                                                        onClick={() => moveItem(idx, 'down')}
+                                                                        className="p-1 hover:bg-base-300 rounded disabled:opacity-20"
+                                                                    >
+                                                                        <ChevronDown size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                {allSlots.map(slot => (
+                                                                    <label key={slot} className="flex items-center gap-1.5 cursor-pointer group flex-1">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={item.slots.includes(slot)}
+                                                                            onChange={() => toggleSlot(item.id, slot)}
+                                                                            className="rounded border-base-300 text-accent focus:ring-accent w-3 h-3"
+                                                                        />
+                                                                        <span className="text-[10px] text-ink-500 group-hover:text-ink-900 transition-colors uppercase tracking-tight">{slot.charAt(0)}</span>
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="pt-2 border-t border-base-200">
+                                                <Button variant="outline" size="sm" className="w-full" onClick={() => setIsSettingsOpen(false)}>
                                                     Done
                                                 </Button>
                                             </div>
                                         </div>
-                                    </div>
-                                ) : (
-                                    /* Desktop: Dropdown */
-                                    <div className="absolute right-0 mt-2 w-72 bg-white border border-base-300 rounded-lg shadow-xl z-50 p-4 space-y-4">
-                                        <div>
-                                            <h4 className="section-title mb-3">Re-order & Configure</h4>
-                                            <div className="space-y-4">
-                                                {plannerConfig.map((item, idx) => (
-                                                    <div key={item.id} className="space-y-2 p-2 rounded-md bg-base-200/50 border border-base-300/50">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-sm font-bold text-ink-900">{item.id}</span>
-                                                            <div className="flex gap-1">
-                                                                <button
-                                                                    disabled={idx === 0}
-                                                                    onClick={() => moveItem(idx, 'up')}
-                                                                    className="p-1 hover:bg-base-300 rounded disabled:opacity-20"
-                                                                >
-                                                                    <ChevronUp size={14} />
-                                                                </button>
-                                                                <button
-                                                                    disabled={idx === plannerConfig.length - 1}
-                                                                    onClick={() => moveItem(idx, 'down')}
-                                                                    className="p-1 hover:bg-base-300 rounded disabled:opacity-20"
-                                                                >
-                                                                    <ChevronDown size={14} />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            {allSlots.map(slot => (
-                                                                <label key={slot} className="flex items-center gap-1.5 cursor-pointer group flex-1">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={item.slots.includes(slot)}
-                                                                        onChange={() => toggleSlot(item.id, slot)}
-                                                                        className="rounded border-base-300 text-accent focus:ring-accent w-3 h-3"
-                                                                    />
-                                                                    <span className="text-[10px] text-ink-500 group-hover:text-ink-900 transition-colors uppercase tracking-tight">{slot.charAt(0)}</span>
-                                                                </label>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="pt-2 border-t border-base-200">
-                                            <Button variant="outline" size="sm" className="w-full" onClick={() => setIsSettingsOpen(false)}>
-                                                Done
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
                 }
             />
@@ -268,6 +360,11 @@ export const PlannerPage = () => {
                     activeConfigs={activeConfigs}
                     onAddMeal={handleAddMeal}
                     onDeleteMeal={handleDeleteMeal}
+                    onRequestPreviousWeek={() => navigateWeek('prev')}
+                    onRequestNextWeek={() => navigateWeek('next')}
+                    onJumpToToday={jumpToToday}
+                    viewContainsToday={viewContainsToday}
+                    onRefreshRecipes={refreshRecipes}
                 />
             ) : (
                 /* Desktop View */
@@ -328,16 +425,17 @@ export const PlannerPage = () => {
                                         config.slots.map((meal) => {
                                             const plan = getPlanForSlot(day, meal, config.id);
                                             const isEditing = addingTo?.date === day && addingTo?.meal === `${config.id}-${meal}`;
-                                            const currentRecipeName = plan ? recipes.find(r => r.id === plan.reference_id)?.name : null;
+                                            const recipeData = plan ? recipes.find(r => r.id === plan.reference_id) : null;
+                                            const currentRecipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
 
                                             return (
                                                 <div key={`${config.id}-${meal}`} className={`p-3 bg-white min-h-[100px] group border-r border-base-300 last:border-r-0`}>
                                                     {isEditing ? (
                                                         <div className="flex flex-col gap-1 h-full">
-                                                            <select
+                                                            <SearchableSelect
+                                                                options={recipes}
                                                                 value={selectedRecipe || plan?.reference_id || ''}
-                                                                onChange={async (e) => {
-                                                                    const newVal = e.target.value;
+                                                                onChange={async (newVal) => {
                                                                     if (!newVal) {
                                                                         setAddingTo(null);
                                                                         setSelectedRecipe('');
@@ -360,12 +458,17 @@ export const PlannerPage = () => {
                                                                         setSelectedRecipe('');
                                                                     }
                                                                 }}
-                                                                className="zen-input w-full p-1 text-xs"
+                                                                getOptionValue={(r) => r.id}
+                                                                getOptionLabel={(r) => r.grocery_list?.name || r.name}
+                                                                placeholder="Select recipe..."
+                                                                searchPlaceholder="Search recipes..."
                                                                 autoFocus
-                                                            >
-                                                                <option value="">Select...</option>
-                                                                {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                                                            </select>
+                                                                onAddNew={() => {
+                                                                    setPendingDesktopSlot({ date: day, meal: `${config.id}-${meal}` });
+                                                                    setIsAddRecipeModalOpen(true);
+                                                                }}
+                                                                addNewLabel="Create new recipe..."
+                                                            />
                                                             <button
                                                                 onClick={async () => {
                                                                     if (plan) {
@@ -414,6 +517,14 @@ export const PlannerPage = () => {
                     </div>
                 </Card>
             )}
+            <AddRecipeModal
+                isOpen={isAddRecipeModalOpen}
+                onClose={() => {
+                    setIsAddRecipeModalOpen(false);
+                    setPendingDesktopSlot(null);
+                }}
+                onRecipeCreated={handleRecipeCreated}
+            />
         </div>
     );
 };

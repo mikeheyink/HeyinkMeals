@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
 import { format, isToday, isTomorrow, isYesterday } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { SearchableSelect } from './ui/SearchableSelect';
+import { AddRecipeModal } from './AddRecipeModal';
 
 interface MobilePlannerViewProps {
     days: Date[];
@@ -9,6 +11,11 @@ interface MobilePlannerViewProps {
     activeConfigs: { id: string; slots: string[] }[];
     onAddMeal: (date: Date, slot: string, dinerId: string, recipeId: string) => Promise<void>;
     onDeleteMeal: (planId: string) => Promise<void>;
+    onRequestPreviousWeek?: () => void;
+    onRequestNextWeek?: () => void;
+    onJumpToToday?: () => void;
+    viewContainsToday?: boolean;
+    onRefreshRecipes?: () => Promise<void>;
 }
 
 export const MobilePlannerView = ({
@@ -17,7 +24,12 @@ export const MobilePlannerView = ({
     recipes,
     activeConfigs,
     onAddMeal,
-    onDeleteMeal
+    onDeleteMeal,
+    onRequestPreviousWeek,
+    onRequestNextWeek,
+    onJumpToToday,
+    viewContainsToday = true,
+    onRefreshRecipes
 }: MobilePlannerViewProps) => {
     const [currentDayIndex, setCurrentDayIndex] = useState(() => {
         // Start on today
@@ -26,6 +38,8 @@ export const MobilePlannerView = ({
     });
     const [addingTo, setAddingTo] = useState<{ date: Date; slot: string; dinerId: string } | null>(null);
     const [selectedRecipe, setSelectedRecipe] = useState('');
+    const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false);
+    const [pendingSlotInfo, setPendingSlotInfo] = useState<{ date: Date; slot: string; dinerId: string } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const currentDay = days[currentDayIndex];
@@ -43,10 +57,20 @@ export const MobilePlannerView = ({
     };
 
     const handleSwipe = (direction: 'left' | 'right') => {
-        if (direction === 'left' && currentDayIndex < days.length - 1) {
-            setCurrentDayIndex(prev => prev + 1);
-        } else if (direction === 'right' && currentDayIndex > 0) {
-            setCurrentDayIndex(prev => prev - 1);
+        if (direction === 'left') {
+            if (currentDayIndex < days.length - 1) {
+                setCurrentDayIndex(prev => prev + 1);
+            } else if (onRequestNextWeek) {
+                // At edge - load next week
+                onRequestNextWeek();
+            }
+        } else if (direction === 'right') {
+            if (currentDayIndex > 0) {
+                setCurrentDayIndex(prev => prev - 1);
+            } else if (onRequestPreviousWeek) {
+                // At edge - load previous week
+                onRequestPreviousWeek();
+            }
         }
     };
 
@@ -70,6 +94,21 @@ export const MobilePlannerView = ({
         setSelectedRecipe('');
     };
 
+    const handleRecipeCreated = async (recipeId: string) => {
+        if (onRefreshRecipes) {
+            await onRefreshRecipes();
+        }
+
+        // If we were in the middle of adding a meal, finish it now
+        if (pendingSlotInfo) {
+            await onAddMeal(pendingSlotInfo.date, pendingSlotInfo.slot, pendingSlotInfo.dinerId, recipeId);
+            setPendingSlotInfo(null);
+            setAddingTo(null);
+        }
+
+        setIsAddRecipeModalOpen(false);
+    };
+
     // Guard: Wait for days to be populated
     if (days.length === 0 || !currentDay) {
         return (
@@ -85,12 +124,11 @@ export const MobilePlannerView = ({
             <div className="flex items-center justify-between bg-white rounded-xl border border-base-300 p-3 shadow-sm">
                 <button
                     onClick={() => handleSwipe('right')}
-                    disabled={currentDayIndex === 0}
-                    className="p-2 rounded-lg hover:bg-base-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-2 rounded-lg hover:bg-base-200 transition-colors"
                 >
                     <ChevronLeft size={24} />
                 </button>
-                <div className="text-center">
+                <div className="text-center flex-1">
                     <div className={`text-lg font-bold ${isToday(currentDay) ? 'text-accent' : 'text-ink-900'}`}>
                         {getDayLabel(currentDay)}
                     </div>
@@ -98,15 +136,22 @@ export const MobilePlannerView = ({
                 </div>
                 <button
                     onClick={() => handleSwipe('left')}
-                    disabled={currentDayIndex === days.length - 1}
-                    className="p-2 rounded-lg hover:bg-base-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-2 rounded-lg hover:bg-base-200 transition-colors"
                 >
                     <ChevronRight size={24} />
                 </button>
             </div>
 
-            {/* Day dots indicator */}
-            <div className="flex justify-center gap-1.5">
+            {/* Day dots indicator with Today button */}
+            <div className="flex items-center justify-center gap-3">
+                {!viewContainsToday && onJumpToToday && (
+                    <button
+                        onClick={onJumpToToday}
+                        className="px-3 py-1 text-xs font-semibold bg-accent text-white rounded-full hover:bg-accent/90 transition-colors"
+                    >
+                        Today
+                    </button>
+                )}
                 {days.map((day, idx) => (
                     <button
                         key={day.toString()}
@@ -131,7 +176,8 @@ export const MobilePlannerView = ({
                 {activeConfigs.map((config) =>
                     config.slots.map((slot) => {
                         const plan = getPlanForSlot(currentDay, slot, config.id);
-                        const recipeName = plan ? recipes.find(r => r.id === plan.reference_id)?.name : null;
+                        const recipeData = plan ? recipes.find(r => r.id === plan.reference_id) : null;
+                        const recipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
                         const isEditing = addingTo?.date === currentDay && addingTo?.slot === slot && addingTo?.dinerId === config.id;
 
                         return (
@@ -159,17 +205,21 @@ export const MobilePlannerView = ({
                                 <div className="p-4">
                                     {isEditing ? (
                                         <div className="space-y-3">
-                                            <select
+                                            <SearchableSelect
+                                                options={recipes}
                                                 value={selectedRecipe}
-                                                onChange={(e) => setSelectedRecipe(e.target.value)}
-                                                className="zen-input w-full"
+                                                onChange={(val) => setSelectedRecipe(val)}
+                                                getOptionValue={(r) => r.id}
+                                                getOptionLabel={(r) => r.grocery_list?.name || r.name}
+                                                placeholder="Select a recipe..."
+                                                searchPlaceholder="Search recipes..."
                                                 autoFocus
-                                            >
-                                                <option value="">Select a recipe...</option>
-                                                {recipes.map(r => (
-                                                    <option key={r.id} value={r.id}>{r.name}</option>
-                                                ))}
-                                            </select>
+                                                onAddNew={() => {
+                                                    setPendingSlotInfo({ date: currentDay, slot, dinerId: config.id });
+                                                    setIsAddRecipeModalOpen(true);
+                                                }}
+                                                addNewLabel="Create new recipe..."
+                                            />
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => { setAddingTo(null); setSelectedRecipe(''); }}
@@ -223,6 +273,14 @@ export const MobilePlannerView = ({
                     })
                 )}
             </div>
+            <AddRecipeModal
+                isOpen={isAddRecipeModalOpen}
+                onClose={() => {
+                    setIsAddRecipeModalOpen(false);
+                    setPendingSlotInfo(null);
+                }}
+                onRecipeCreated={handleRecipeCreated}
+            />
         </div>
     );
 };

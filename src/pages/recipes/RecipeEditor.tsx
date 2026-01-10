@@ -4,6 +4,8 @@ import { recipeService } from '../../services/recipeService';
 import { pantryService } from '../../services/pantryService';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { AddGroceryModal } from '../../components/AddGroceryModal';
 import { ArrowLeft, Save, Plus } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 
@@ -25,6 +27,7 @@ export const RecipeEditor = () => {
     const [selGrocery, setSelGrocery] = useState('');
     const [qty, setQty] = useState(1);
     const [unit, setUnit] = useState('items');
+    const [isAddGroceryModalOpen, setIsAddGroceryModalOpen] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
@@ -130,13 +133,17 @@ export const RecipeEditor = () => {
                                 <div className="flex flex-col md:flex-row gap-4 mb-8 p-4 bg-base-200 rounded-xl items-end border border-base-300">
                                     <div className="flex-1 w-full">
                                         <label className="text-[10px] font-bold uppercase text-ink-300 block mb-1">Ingredient</label>
-                                        <select
+                                        <SearchableSelect
+                                            options={groceries}
                                             value={selGrocery}
-                                            onChange={e => setSelGrocery(e.target.value)}
-                                            className="zen-input w-full"
-                                        >
-                                            {groceries.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                                        </select>
+                                            onChange={(val) => setSelGrocery(val)}
+                                            getOptionValue={(g) => g.id}
+                                            getOptionLabel={(g) => g.name}
+                                            placeholder="Select ingredient..."
+                                            searchPlaceholder="Search ingredients..."
+                                            onAddNew={() => setIsAddGroceryModalOpen(true)}
+                                            addNewLabel="Create new ingredient..."
+                                        />
                                     </div>
                                     <div className="w-full md:w-24">
                                         <label className="text-[10px] font-bold uppercase text-ink-300 block mb-1">Qty</label>
@@ -210,6 +217,19 @@ export const RecipeEditor = () => {
                 </div>
 
             </div>
-        </div>
+
+            <AddGroceryModal
+                isOpen={isAddGroceryModalOpen}
+                onClose={() => setIsAddGroceryModalOpen(false)}
+                onItemAdded={(grocery) => {
+                    const loadData = async () => {
+                        const g = await pantryService.getGroceries();
+                        setGroceries(g);
+                        setSelGrocery(grocery.id);
+                    }
+                    loadData();
+                }}
+            />
+        </div >
     );
 };

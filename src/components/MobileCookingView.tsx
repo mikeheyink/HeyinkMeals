@@ -45,9 +45,11 @@ export const MobileCookingView = ({
                     const plan = getPlanForSlot(today, slotOrder[i], config.id);
                     if (plan) {
                         const recipe = recipes.find(r => r.id === plan.reference_id);
+                        const displayName = recipe?.grocery_list?.name || recipe?.name || 'Unknown';
                         return {
                             plan,
                             recipe,
+                            displayName,
                             slot: slotOrder[i],
                             diner: config.id,
                             time: i === 0 ? '8:00 AM' : i === 1 ? '12:30 PM' : '6:30 PM'
@@ -70,7 +72,7 @@ export const MobileCookingView = ({
                         <Clock size={14} />
                         <span>Up Next • {nextMeal.time}</span>
                     </div>
-                    <h2 className="text-2xl font-bold mb-1">{nextMeal.recipe?.name || 'Unknown Recipe'}</h2>
+                    <h2 className="text-2xl font-bold mb-1">{nextMeal.displayName}</h2>
                     <div className="flex items-center gap-2 text-white/80 text-sm mb-4">
                         <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-bold uppercase">
                             {nextMeal.slot}
@@ -102,7 +104,8 @@ export const MobileCookingView = ({
                         const plan = getPlanForSlot(day, slot, config.id);
                         if (plan) {
                             const recipe = recipes.find(r => r.id === plan.reference_id);
-                            dayPlans.push({ plan, recipe, slot, diner: config.id });
+                            const displayName = recipe?.grocery_list?.name || recipe?.name || 'Unknown';
+                            dayPlans.push({ plan, recipe, displayName, slot, diner: config.id });
                         }
                     });
                 });
@@ -116,7 +119,7 @@ export const MobileCookingView = ({
                             {getDayLabel(day)} — {format(day, 'MMM d')}
                         </h3>
                         <div className="space-y-2">
-                            {dayPlans.map(({ plan, recipe, slot, diner }) => (
+                            {dayPlans.map(({ plan, displayName, slot, diner }) => (
                                 <button
                                     key={plan.id}
                                     onClick={() => navigate(`/cooking/${plan.id}`)}
@@ -127,7 +130,7 @@ export const MobileCookingView = ({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-bold text-ink-900 truncate">
-                                            {recipe?.name || 'Unknown Recipe'}
+                                            {displayName}
                                         </h4>
                                         <div className="flex items-center gap-2 text-xs text-ink-500">
                                             <span className="font-bold uppercase">{slot}</span>

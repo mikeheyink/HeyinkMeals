@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { pantryService } from '../../services/pantryService';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { AddCategoryModal } from '../../components/AddCategoryModal';
 import { Plus, Loader2, Edit2, Trash2, X, Check, Search } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 
@@ -19,7 +21,11 @@ export const PantryPage = () => {
     // Edit State
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
+
     const [editCat, setEditCat] = useState('');
+
+    const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+    const [categoryModalContext, setCategoryModalContext] = useState<'add' | 'edit'>('add');
 
     const loadData = async () => {
         try {
@@ -142,15 +148,20 @@ export const PantryPage = () => {
                         </div>
                         <div className="space-y-2">
                             <label className="section-title">Category</label>
-                            <select
+                            <SearchableSelect
+                                options={categories}
                                 value={selectedCat}
-                                onChange={(e) => setSelectedCat(e.target.value)}
-                                className="zen-input w-full"
-                            >
-                                {categories.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
+                                onChange={(val) => setSelectedCat(val)}
+                                getOptionValue={(c) => c.id}
+                                getOptionLabel={(c) => c.name}
+                                placeholder="Select category..."
+                                searchPlaceholder="Search categories..."
+                                onAddNew={() => {
+                                    setCategoryModalContext('add');
+                                    setIsAddCategoryModalOpen(true);
+                                }}
+                                addNewLabel="Create new category..."
+                            />
                         </div>
                         <Button type="submit" disabled={loading} className="w-full">
                             {loading ? <Loader2 className="animate-spin" /> : 'Add to Library'}
@@ -191,15 +202,20 @@ export const PantryPage = () => {
                                                     />
                                                 </td>
                                                 <td className="zen-table-cell">
-                                                    <select
+                                                    <SearchableSelect
+                                                        options={categories}
                                                         value={editCat}
-                                                        onChange={(e) => setEditCat(e.target.value)}
-                                                        className="zen-input w-full"
-                                                    >
-                                                        {categories.map(c => (
-                                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                                        ))}
-                                                    </select>
+                                                        onChange={(val) => setEditCat(val)}
+                                                        getOptionValue={(c) => c.id}
+                                                        getOptionLabel={(c) => c.name}
+                                                        placeholder="Select category..."
+                                                        searchPlaceholder="Search categories..."
+                                                        onAddNew={() => {
+                                                            setCategoryModalContext('edit');
+                                                            setIsAddCategoryModalOpen(true);
+                                                        }}
+                                                        addNewLabel="Create new category..."
+                                                    />
                                                 </td>
                                                 <td className="zen-table-cell">
                                                     <div className="flex justify-end gap-1">
@@ -265,15 +281,20 @@ export const PantryPage = () => {
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black uppercase tracking-tight text-ink-300">Category</label>
-                                            <select
+                                            <SearchableSelect
+                                                options={categories}
                                                 value={editCat}
-                                                onChange={(e) => setEditCat(e.target.value)}
-                                                className="zen-input w-full"
-                                            >
-                                                {categories.map(c => (
-                                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setEditCat(val)}
+                                                getOptionValue={(c) => c.id}
+                                                getOptionLabel={(c) => c.name}
+                                                placeholder="Select category..."
+                                                searchPlaceholder="Search categories..."
+                                                onAddNew={() => {
+                                                    setCategoryModalContext('edit');
+                                                    setIsAddCategoryModalOpen(true);
+                                                }}
+                                                addNewLabel="Create new category..."
+                                            />
                                         </div>
                                         <div className="flex gap-2">
                                             <Button size="sm" variant="secondary" className="flex-1" onClick={handleCancelEdit}>Cancel</Button>
@@ -311,6 +332,22 @@ export const PantryPage = () => {
                     </div>
                 </div>
             )}
+            <AddCategoryModal
+                isOpen={isAddCategoryModalOpen}
+                onClose={() => setIsAddCategoryModalOpen(false)}
+                onCategoryAdded={(category) => {
+                    const reloadOnlyCategories = async () => {
+                        const c = await pantryService.getCategories();
+                        setCategories(c);
+                        if (categoryModalContext === 'add') {
+                            setSelectedCat(category.id);
+                        } else {
+                            setEditCat(category.id);
+                        }
+                    };
+                    reloadOnlyCategories();
+                }}
+            />
         </div>
     );
 };

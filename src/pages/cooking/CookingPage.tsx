@@ -3,7 +3,6 @@ import { format, addDays, startOfDay, isToday } from 'date-fns';
 import { plannerService } from '../../services/plannerService';
 import { preferencesService } from '../../services/preferencesService';
 import type { PlannerConfigItem } from '../../services/preferencesService';
-import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { ChefHat, ChevronRight, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -49,8 +48,8 @@ export const CookingPage = () => {
             const p = await plannerService.getPlanForRange(startStr, endStr);
             setPlans(p || []);
 
-            const { data } = await supabase.from('recipes').select('id, name');
-            if (data) setRecipes(data);
+            const recipeData = await plannerService.getRecipesWithListNames();
+            if (recipeData) setRecipes(recipeData);
         } catch (e) {
             console.error(e);
         } finally {
@@ -143,7 +142,8 @@ export const CookingPage = () => {
                                 {activeConfigs.map((config) =>
                                     config.slots.map((meal) => {
                                         const plan = getPlanForSlot(day, meal, config.id);
-                                        const currentRecipeName = plan ? recipes.find(r => r.id === plan.reference_id)?.name : null;
+                                        const recipeData = plan ? recipes.find(r => r.id === plan.reference_id) : null;
+                                        const currentRecipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
 
                                         return (
                                             <div key={`${config.id}-${meal}`} className={`p-3 min-h-[120px] bg-white group border-r border-base-300 last:border-r-0 flex flex-col justify-between items-start transition-colors ${isToday(day) ? 'bg-accent/[0.01]' : ''}`}>
