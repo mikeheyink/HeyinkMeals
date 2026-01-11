@@ -27,16 +27,6 @@ export const ShoppingListPage = () => {
             setLoading(false);
         }
     };
-    // ... existing useEffect and handlers ...
-
-    // ADD IMPORT (this will be handled by auto-import usually, but forcing it here for clarity if I was writing the whole file, but split implies replacement)
-    // Actually, I need to add the import at the top. 
-    // Wait, replace_file_content allows replacing a block. I will replace the state definition and the return statement part.
-    // But I also need to add the import.
-    // I'll do this in two steps or use multi_replace if I can't encompass it all.
-    // Since imports are at the top and JSX is at the bottom, I should use multi_replace.
-    // Let me switch to multi_replace.
-
 
     useEffect(() => {
         loadList();
@@ -149,22 +139,22 @@ export const ShoppingListPage = () => {
             <div className="space-y-8">
                 <PageHeader
                     title="Shopping Ledger"
-                    subtitle={`${activeItems.length} items to secure • ${inStockItems.length + orderedItems.length} secured`}
+                    subtitle={`${activeItems.length} items on your list`}
                     actions={
-                        <>
-                            <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)} icon={Plus}>
+                        <div className="flex flex-wrap md:flex-nowrap gap-2">
+                            <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)} icon={Plus} className="flex-1 md:flex-none">
                                 Add
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => setShowAddListModal(true)} icon={ListIcon}>
+                            <Button variant="outline" size="sm" onClick={() => setShowAddListModal(true)} icon={ListIcon} className="flex-1 md:flex-none">
                                 Add Lists
                             </Button>
-                            <Button variant="outline" size="sm" onClick={loadList} icon={RefreshCw} disabled={loading}>
-                                Sync
+                            <Button variant="outline" size="sm" onClick={loadList} icon={RefreshCw} disabled={loading} className="md:w-auto" title="Sync">
+                                <span className="hidden md:inline">Sync</span>
                             </Button>
-                            <Button variant="secondary" size="sm" onClick={handleArchive} icon={Archive}>
-                                Archive
+                            <Button variant="secondary" size="sm" onClick={handleArchive} icon={Archive} className="md:w-auto" title="Archive">
+                                <span className="hidden md:inline">Archive</span>
                             </Button>
-                        </>
+                        </div>
                     }
                 />
 
@@ -255,6 +245,9 @@ export const ShoppingListPage = () => {
                     </section>
                 )}
             </div>
+
+
+
 
             <AddItemModal
                 isOpen={showAddModal}
