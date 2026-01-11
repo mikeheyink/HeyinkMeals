@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Save, Loader2, Plus } from 'lucide-react';
+import { X, Save, Loader2 } from 'lucide-react';
 import { pantryService } from '../services/pantryService';
 import { Button } from './ui/Button';
 
@@ -13,7 +13,6 @@ export const AddGroceryModal = ({ isOpen, onClose, onItemAdded }: AddGroceryModa
     const [name, setName] = useState('');
     const [categories, setCategories] = useState<any[]>([]);
     const [selectedCategory, setSelectedCategory] = useState('');
-    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
