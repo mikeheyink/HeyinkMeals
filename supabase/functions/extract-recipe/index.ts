@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // Trigger deployment
 import { cheerio } from "https://deno.land/x/cheerio@1.0.7/mod.ts";
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.1.3";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
