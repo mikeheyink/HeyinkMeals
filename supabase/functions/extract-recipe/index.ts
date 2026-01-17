@@ -56,8 +56,9 @@ serve(async (req) => {
        - cups -> ml (check context, if flour 1 cup ~= 120g, if liquid 1 cup ~= 250ml. If unsure keeping 'cup' is okay but prefer metric).
        - stick of butter -> grams (1 stick = 113g)
        - Fahrenheit -> Celsius
-    4. Return strictly VALID JSON with no additional formatting or code blocks.
-    5. Do not include markdown formatting like \`\`\`json.
+    4. For instructions, format as clear numbered steps. Each step on a new line, prefixed with the step number (e.g., "1. Preheat the oven..."). Clean up any HTML artifacts, special characters, or formatting issues.
+    5. Return strictly VALID JSON with no additional formatting or code blocks.
+    6. Do not include markdown formatting like \`\`\`json.
     
     JSON Schema:
     {
@@ -76,7 +77,7 @@ serve(async (req) => {
             "name": string
           }
         ],
-        "instructions": string
+        "instructions": string (formatted as numbered steps, one per line)
       },
       "error": string
     }

@@ -9,6 +9,7 @@ export const plannerService = {
 
     /**
      * Fetches recipes with their linked grocery list names for display in dropdowns
+     * Excludes recipes with archived grocery lists
      */
     async getRecipesWithListNames() {
         const { data, error } = await supabase
@@ -17,11 +18,15 @@ export const plannerService = {
                 id,
                 name,
                 ingredients_list_id,
-                grocery_list:grocery_lists!ingredients_list_id (name)
+                grocery_list:grocery_lists!ingredients_list_id (name, is_archived)
             `)
             .order('name');
         if (error) throw error;
-        return data;
+
+        // Filter out recipes whose linked list is archived
+        return data?.filter(recipe =>
+            !recipe.grocery_list || !(recipe.grocery_list as any).is_archived
+        ) || [];
     },
 
     async addPlanEntry(date: string, slot: MealSlot, dinerType: DinerType, type: PlanType, referenceId: string) {
@@ -48,8 +53,8 @@ export const plannerService = {
                     meal_plan_entry_id: entry.id,
                     recipe_id: referenceId,
                     grocery_type_id: item.grocery_type_id,
-                    quantity: item.quantity,
-                    unit: item.unit,
+                    quantity: item.quantity || 1,
+                    unit: item.unit || '',
                     is_in_stock: item.is_in_stock || false,
                     is_purchased: item.is_purchased || false
                 }));

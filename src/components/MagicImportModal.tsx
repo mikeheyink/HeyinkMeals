@@ -136,8 +136,8 @@ export const MagicImportModal = ({ isOpen, onClose, onSuccess }: MagicImportModa
                     await listService.addListItem(
                         listData.id,
                         groceryTypeId,
-                        ing.quantity,
-                        ing.unit
+                        ing.quantity || 1,
+                        ing.unit || ''
                     );
                 }
             });
