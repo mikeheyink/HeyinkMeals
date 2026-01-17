@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Save, Loader2 } from 'lucide-react';
 import { pantryService } from '../services/pantryService';
 import { Button } from './ui/Button';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface AddCategoryModalProps {
     isOpen: boolean;
@@ -14,6 +15,9 @@ export const AddCategoryModal = ({ isOpen, onClose, onCategoryAdded }: AddCatego
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useFocusTrap({ isOpen, onClose, containerRef: modalRef });
 
     useEffect(() => {
         if (isOpen) {
@@ -43,16 +47,10 @@ export const AddCategoryModal = ({ isOpen, onClose, onCategoryAdded }: AddCatego
         }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            onClose();
-        }
-    };
-
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onKeyDown={handleKeyDown}>
+        <div ref={modalRef} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/50 backdrop-blur-sm"

@@ -3,6 +3,7 @@ import { X, Plus, Search, Loader2 } from 'lucide-react';
 import { pantryService } from '../services/pantryService';
 import { plannerService } from '../services/plannerService';
 import { Button } from './ui/Button';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface AddItemModalProps {
     isOpen: boolean;
@@ -26,7 +27,12 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
     const [quantity, setQuantity] = useState(1);
     const [unit, setUnit] = useState('item');
     const [newItemCategory, setNewItemCategory] = useState<string>('');
+    const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const inputRef = useRef<HTMLInputElement>(null);
+    const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useFocusTrap({ isOpen, onClose, containerRef: modalRef });
 
     useEffect(() => {
         if (isOpen) {
@@ -35,6 +41,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
             setQuantity(1);
             setUnit('item');
             setNewItemCategory('');
+            setHighlightedIndex(-1);
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [isOpen]);
@@ -63,9 +70,48 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
         g.name.toLowerCase().includes(search.toLowerCase())
     );
 
+    // Limit to 50 items for display
+    const displayedGroceries = filteredGroceries.slice(0, 50);
+
     const exactMatch = groceries.some(g =>
         g.name.toLowerCase() === search.toLowerCase()
     );
+
+    // Reset highlighted index when search changes
+    useEffect(() => {
+        setHighlightedIndex(search.trim() ? 0 : -1);
+    }, [search]);
+
+    // Scroll highlighted item into view
+    useEffect(() => {
+        if (highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
+            itemRefs.current[highlightedIndex]?.scrollIntoView({
+                block: 'nearest',
+                behavior: 'smooth'
+            });
+        }
+    }, [highlightedIndex]);
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (displayedGroceries.length === 0) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedIndex(prev => Math.min(prev + 1, displayedGroceries.length - 1));
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedIndex(prev => Math.max(prev - 1, 0));
+                break;
+            case 'Enter':
+                if (highlightedIndex >= 0 && highlightedIndex < displayedGroceries.length) {
+                    e.preventDefault();
+                    handleSelectItem(displayedGroceries[highlightedIndex].id);
+                }
+                break;
+        }
+    };
 
     const handleSelectItem = async (groceryId: string) => {
         setAdding(true);
@@ -99,7 +145,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div ref={modalRef} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onKeyDown={handleKeyDown}>
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -215,20 +261,26 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
                             )}
 
                             {/* Filtered List */}
-                            {filteredGroceries.length > 0 ? (
-                                filteredGroceries.slice(0, 50).map((grocery) => (
-                                    <button
-                                        key={grocery.id}
-                                        onClick={() => handleSelectItem(grocery.id)}
-                                        disabled={adding}
-                                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-base-200 transition-colors border-b border-base-300/50 last:border-0 disabled:opacity-50"
-                                    >
-                                        <span className="font-medium text-ink-900">{grocery.name}</span>
-                                        <span className="text-xs text-ink-300 uppercase tracking-wider">
-                                            {grocery.grocery_categories?.name}
-                                        </span>
-                                    </button>
-                                ))
+                            {displayedGroceries.length > 0 ? (
+                                displayedGroceries.map((grocery, index) => {
+                                    const isHighlighted = index === highlightedIndex;
+                                    return (
+                                        <button
+                                            key={grocery.id}
+                                            ref={el => { itemRefs.current[index] = el; }}
+                                            onClick={() => handleSelectItem(grocery.id)}
+                                            onMouseEnter={() => setHighlightedIndex(index)}
+                                            disabled={adding}
+                                            className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-base-300/50 last:border-0 disabled:opacity-50 ${isHighlighted ? 'bg-base-200' : 'hover:bg-base-100'
+                                                }`}
+                                        >
+                                            <span className="font-medium text-ink-900">{grocery.name}</span>
+                                            <span className="text-xs text-ink-300 uppercase tracking-wider">
+                                                {grocery.grocery_categories?.name}
+                                            </span>
+                                        </button>
+                                    );
+                                })
                             ) : search.trim() && exactMatch ? null : (
                                 <div className="p-8 text-center text-ink-300 text-sm">
                                     {search ? 'No matching items' : 'Start typing to search...'}

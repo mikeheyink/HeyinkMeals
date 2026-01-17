@@ -14,6 +14,7 @@ interface SearchableSelectProps<T> {
     autoFocus?: boolean;
     onAddNew?: () => void;
     addNewLabel?: string;
+    keepOpenOnSelect?: boolean;
 }
 
 export function SearchableSelect<T>({
@@ -28,12 +29,16 @@ export function SearchableSelect<T>({
     className = '',
     autoFocus = false,
     onAddNew,
-    addNewLabel = 'Add New'
+    addNewLabel = 'Add New',
+    keepOpenOnSelect = false
 }: SearchableSelectProps<T>) {
     const [isOpen, setIsOpen] = useState(autoFocus);
     const [search, setSearch] = useState('');
+    const [highlightedIndex, setHighlightedIndex] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const triggerButtonRef = useRef<HTMLButtonElement>(null);
+    const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
     // Get selected option label
     const selectedOption = options.find(opt => getOptionValue(opt) === value);
@@ -46,6 +51,9 @@ export function SearchableSelect<T>({
         .filter(opt =>
             getOptionLabel(opt).toLowerCase().includes(search.toLowerCase())
         );
+
+    // Total navigable items (options + "Add New" if present)
+    const totalItems = sortedAndFilteredOptions.length + (onAddNew ? 1 : 0);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -69,16 +77,57 @@ export function SearchableSelect<T>({
         }
     }, [isOpen]);
 
+    // Reset highlighted index when search changes or dropdown opens
+    useEffect(() => {
+        setHighlightedIndex(0);
+    }, [search, isOpen]);
+
+    // Scroll highlighted option into view
+    useEffect(() => {
+        if (isOpen && optionRefs.current[highlightedIndex]) {
+            optionRefs.current[highlightedIndex]?.scrollIntoView({
+                block: 'nearest',
+                behavior: 'smooth'
+            });
+        }
+    }, [highlightedIndex, isOpen]);
+
     const handleSelect = (option: T) => {
         onChange(getOptionValue(option));
-        setIsOpen(false);
         setSearch('');
+        setIsOpen(false);
+        if (keepOpenOnSelect) {
+            // Focus trigger button so user can press Enter to reopen
+            setTimeout(() => triggerButtonRef.current?.focus(), 0);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            setIsOpen(false);
-            setSearch('');
+        if (!isOpen) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedIndex(prev => Math.min(prev + 1, totalItems - 1));
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedIndex(prev => Math.max(prev - 1, 0));
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (highlightedIndex >= 0 && highlightedIndex < sortedAndFilteredOptions.length) {
+                    handleSelect(sortedAndFilteredOptions[highlightedIndex]);
+                } else if (onAddNew && highlightedIndex === sortedAndFilteredOptions.length) {
+                    setIsOpen(false);
+                    setSearch('');
+                    onAddNew();
+                }
+                break;
+            case 'Escape':
+                setIsOpen(false);
+                setSearch('');
+                break;
         }
     };
 
@@ -86,6 +135,7 @@ export function SearchableSelect<T>({
         <div ref={containerRef} className={`relative ${className}`} onKeyDown={handleKeyDown}>
             {/* Trigger Button */}
             <button
+                ref={triggerButtonRef}
                 type="button"
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 disabled={disabled}
@@ -131,19 +181,24 @@ export function SearchableSelect<T>({
                     {/* Options List */}
                     <div className="max-h-48 overflow-y-auto">
                         {sortedAndFilteredOptions.length > 0 ? (
-                            sortedAndFilteredOptions.map((option) => {
+                            sortedAndFilteredOptions.map((option, index) => {
                                 const optValue = getOptionValue(option);
                                 const optLabel = getOptionLabel(option);
                                 const isSelected = optValue === value;
+                                const isHighlighted = index === highlightedIndex;
 
                                 return (
                                     <button
                                         key={optValue}
+                                        ref={el => { optionRefs.current[index] = el; }}
                                         type="button"
                                         onClick={() => handleSelect(option)}
+                                        onMouseEnter={() => setHighlightedIndex(index)}
                                         className={`w-full px-3 py-2.5 text-left text-sm transition-colors ${isSelected
                                             ? 'bg-accent/10 text-accent font-medium'
-                                            : 'text-ink-900 hover:bg-base-100'
+                                            : isHighlighted
+                                                ? 'bg-base-200 text-ink-900'
+                                                : 'text-ink-900 hover:bg-base-100'
                                             }`}
                                     >
                                         {optLabel}
@@ -161,13 +216,18 @@ export function SearchableSelect<T>({
                     {onAddNew && (
                         <div className="border-t border-base-200">
                             <button
+                                ref={el => { optionRefs.current[sortedAndFilteredOptions.length] = el; }}
                                 type="button"
                                 onClick={() => {
                                     setIsOpen(false);
                                     setSearch('');
                                     onAddNew();
                                 }}
-                                className="w-full px-3 py-2.5 text-left text-sm font-medium text-accent hover:bg-accent/5 transition-colors flex items-center gap-2"
+                                onMouseEnter={() => setHighlightedIndex(sortedAndFilteredOptions.length)}
+                                className={`w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors flex items-center gap-2 ${highlightedIndex === sortedAndFilteredOptions.length
+                                    ? 'bg-accent/10'
+                                    : 'hover:bg-accent/5'
+                                    }`}
                             >
                                 <span className="text-accent">+</span>
                                 {addNewLabel}

@@ -89,7 +89,7 @@ async function seedData() {
         // Create grocery list for this recipe
         const { data: list, error: listError } = await supabase
             .from('grocery_lists')
-            .insert({ name: `${recipe.name} Ingredients` })
+            .insert({ name: recipe.name })
             .select('id')
             .single();
 

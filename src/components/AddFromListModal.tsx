@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { X, List, Plus } from 'lucide-react';
 import { Button } from './ui/Button';
 import { SearchableSelect } from './ui/SearchableSelect';
 import { listService } from '../services/recipeService';
 import { plannerService } from '../services/plannerService';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface AddFromListModalProps {
     isOpen: boolean;
@@ -16,6 +17,9 @@ export function AddFromListModal({ isOpen, onClose, onItemsAdded }: AddFromListM
     const [selectedListId, setSelectedListId] = useState('');
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useFocusTrap({ isOpen, onClose, containerRef: modalRef });
 
     useEffect(() => {
         if (isOpen) {
@@ -53,7 +57,7 @@ export function AddFromListModal({ isOpen, onClose, onItemsAdded }: AddFromListM
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div ref={modalRef} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="flex items-center justify-between p-4 border-b border-base-200 bg-base-50/50">
                     <div className="flex items-center gap-2 text-ink-900">

@@ -60,7 +60,7 @@ export const recipeService = {
         // 1. Create a Grocery List first to hold ingredients
         const { data: listData, error: listError } = await supabase
             .from('grocery_lists')
-            .insert({ name: `${name} Ingredients` })
+            .insert({ name })
             .select()
             .single();
 

@@ -51,9 +51,9 @@ export const MobilePlannerView = ({
         return format(date, 'EEEE');
     };
 
-    const getPlanForSlot = (date: Date, mealType: string, dinerType: string) => {
+    const getPlansForSlot = (date: Date, mealType: string, dinerType: string) => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        return plans.find(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
+        return plans.filter(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
     };
 
     const handleSwipe = (direction: 'left' | 'right') => {
@@ -175,16 +175,23 @@ export const MobilePlannerView = ({
             >
                 {activeConfigs.map((config) =>
                     config.slots.map((slot) => {
-                        const plan = getPlanForSlot(currentDay, slot, config.id);
-                        const recipeData = plan ? recipes.find(r => r.id === plan.reference_id) : null;
-                        const recipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
+                        const slotPlans = getPlansForSlot(currentDay, slot, config.id);
+                        const hasPlans = slotPlans.length > 0;
                         const isEditing = addingTo?.date === currentDay && addingTo?.slot === slot && addingTo?.dinerId === config.id;
+
+                        // Get recipe info for each plan
+                        const recipesInSlot = slotPlans.map(plan => {
+                            const recipeData = recipes.find(r => r.id === plan.reference_id);
+                            return {
+                                planId: plan.id,
+                                name: recipeData?.grocery_list?.name || recipeData?.name || 'Unknown'
+                            };
+                        });
 
                         return (
                             <div
                                 key={`${config.id}-${slot}`}
-                                className={`bg-white rounded-xl border border-base-300 overflow-hidden shadow-sm transition-all ${isEditing ? 'ring-2 ring-accent' : ''
-                                    }`}
+                                className={`bg-white rounded-xl border border-base-300 overflow-hidden shadow-sm transition-all ${isEditing ? 'ring-2 ring-accent' : ''}`}
                             >
                                 {/* Slot Header */}
                                 <div className="flex items-center justify-between px-4 py-2 bg-base-200/50 border-b border-base-300">
@@ -236,27 +243,50 @@ export const MobilePlannerView = ({
                                                 </button>
                                             </div>
                                         </div>
-                                    ) : plan ? (
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h3 className="font-bold text-ink-900">{recipeName || 'Unknown Recipe'}</h3>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => setAddingTo({ date: currentDay, slot, dinerId: config.id })}
-                                                    className="p-2 rounded-lg text-ink-300 hover:text-accent hover:bg-accent/10 transition-colors"
-                                                    title="Change"
-                                                >
-                                                    <Plus size={18} />
-                                                </button>
-                                                <button
-                                                    onClick={() => onDeleteMeal(plan.id)}
-                                                    className="p-2 rounded-lg text-ink-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                                    title="Remove"
-                                                >
-                                                    <X size={18} />
-                                                </button>
-                                            </div>
+                                    ) : hasPlans ? (
+                                        <div className="space-y-2">
+                                            {/* Recipe Pills - show up to 2, collapse rest */}
+                                            {slotPlans.length <= 2 ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {recipesInSlot.map(({ planId, name }) => (
+                                                        <div
+                                                            key={planId}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-base-100 border border-base-300 rounded-full text-sm font-medium text-ink-800"
+                                                        >
+                                                            <span className="max-w-[140px] truncate">{name}</span>
+                                                            <button
+                                                                onClick={() => onDeleteMeal(planId)}
+                                                                className="p-0.5 rounded-full hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-2">
+                                                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-base-100 border border-base-300 rounded-full text-sm font-medium text-ink-800">
+                                                        <span className="max-w-[140px] truncate">{recipesInSlot[0].name}</span>
+                                                        <button
+                                                            onClick={() => onDeleteMeal(recipesInSlot[0].planId)}
+                                                            className="p-0.5 rounded-full hover:bg-red-100 hover:text-red-600 transition-colors"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                    <span className="px-3 py-1.5 bg-base-200 rounded-full text-xs font-medium text-ink-500">
+                                                        +{slotPlans.length - 1} more
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {/* Add Another Button */}
+                                            <button
+                                                onClick={() => setAddingTo({ date: currentDay, slot, dinerId: config.id })}
+                                                className="w-full py-2 flex items-center justify-center gap-1.5 text-accent text-sm font-medium hover:bg-accent/5 rounded-lg transition-colors"
+                                            >
+                                                <Plus size={16} />
+                                                <span>Add Another</span>
+                                            </button>
                                         </div>
                                     ) : (
                                         <button

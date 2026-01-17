@@ -5,6 +5,7 @@ import { pantryService } from '../services/pantryService';
 import { Button } from './ui/Button';
 import { SearchableSelect } from './ui/SearchableSelect';
 import { AddGroceryModal } from './AddGroceryModal';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface AddRecipeModalProps {
     isOpen: boolean;
@@ -22,6 +23,9 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
     const [availableGroceries, setAvailableGroceries] = useState<any[]>([]);
     const [isAddGroceryModalOpen, setIsAddGroceryModalOpen] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useFocusTrap({ isOpen: isOpen && !isAddGroceryModalOpen, onClose, containerRef: modalRef });
 
     useEffect(() => {
         if (isOpen) {
@@ -76,14 +80,6 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
         }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            if (!isAddGroceryModalOpen) {
-                onClose();
-            }
-        }
-    };
-
     const addIngredient = (groceryId: string) => {
         const grocery = availableGroceries.find(g => g.id === groceryId);
         if (!grocery) return;
@@ -117,7 +113,7 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
 
     return (
         <>
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onKeyDown={handleKeyDown}>
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
                 {/* Backdrop */}
                 <div
                     className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -125,7 +121,7 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
                 />
 
                 {/* Modal */}
-                <div className="relative bg-white w-full sm:w-[500px] sm:max-h-[85vh] max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
+                <div ref={modalRef} className="relative bg-white w-full sm:w-[500px] sm:max-h-[85vh] max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-base-300">
                         <h2 className="text-lg font-semibold text-ink-900">New Recipe</h2>
@@ -190,6 +186,7 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
                                     searchPlaceholder="Search ingredients..."
                                     onAddNew={() => setIsAddGroceryModalOpen(true)}
                                     addNewLabel="Create new ingredient..."
+                                    keepOpenOnSelect={true}
                                 />
                             </div>
 

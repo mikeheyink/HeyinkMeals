@@ -116,9 +116,9 @@ export const PlannerPage = () => {
 
 
 
-    const getPlanForSlot = (date: Date, mealType: string, dinerType: string) => {
+    const getPlansForSlot = (date: Date, mealType: string, dinerType: string) => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        return plans.find(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
+        return plans.filter(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
     };
 
     const moveItem = (index: number, direction: 'up' | 'down') => {
@@ -150,11 +150,8 @@ export const PlannerPage = () => {
     // Handler functions for mobile view
     const handleAddMeal = async (date: Date, slot: string, dinerId: string, recipeId: string) => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        const existingPlan = getPlanForSlot(date, slot, dinerId);
         try {
-            if (existingPlan) {
-                await plannerService.deletePlanEntry(existingPlan.id);
-            }
+            // Allow multiple recipes per slot - no longer delete existing
             await plannerService.addPlanEntry(dateStr, slot as any, dinerId as any, 'Recipe', recipeId);
             await loadData(days[0], days[10]);
         } catch (err) {
@@ -423,10 +420,18 @@ export const PlannerPage = () => {
                                     {/* Meal Cells */}
                                     {activeConfigs.map((config) =>
                                         config.slots.map((meal) => {
-                                            const plan = getPlanForSlot(day, meal, config.id);
+                                            const slotPlans = getPlansForSlot(day, meal, config.id);
                                             const isEditing = addingTo?.date === day && addingTo?.meal === `${config.id}-${meal}`;
-                                            const recipeData = plan ? recipes.find(r => r.id === plan.reference_id) : null;
-                                            const currentRecipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
+                                            const hasPlans = slotPlans.length > 0;
+
+                                            // Get recipe names for display
+                                            const recipesInSlot = slotPlans.map(plan => {
+                                                const recipeData = recipes.find(r => r.id === plan.reference_id);
+                                                return {
+                                                    planId: plan.id,
+                                                    name: recipeData?.grocery_list?.name || recipeData?.name || 'Unknown'
+                                                };
+                                            });
 
                                             return (
                                                 <div key={`${config.id}-${meal}`} className={`p-3 bg-white min-h-[100px] group border-r border-base-300 last:border-r-0`}>
@@ -434,7 +439,7 @@ export const PlannerPage = () => {
                                                         <div className="flex flex-col gap-1 h-full">
                                                             <SearchableSelect
                                                                 options={recipes}
-                                                                value={selectedRecipe || plan?.reference_id || ''}
+                                                                value={selectedRecipe}
                                                                 onChange={async (newVal) => {
                                                                     if (!newVal) {
                                                                         setAddingTo(null);
@@ -446,13 +451,11 @@ export const PlannerPage = () => {
                                                                     const dateStr = format(day, 'yyyy-MM-dd');
 
                                                                     try {
-                                                                        if (plan) {
-                                                                            await plannerService.deletePlanEntry(plan.id);
-                                                                        }
+                                                                        // Add new recipe (multi-recipe: no deletion)
                                                                         await plannerService.addPlanEntry(dateStr, meal as any, config.id as any, 'Recipe', newVal);
                                                                         await loadData(days[0], days[10]);
                                                                     } catch (err) {
-                                                                        console.error('Failed to update meal:', err);
+                                                                        console.error('Failed to add meal:', err);
                                                                     } finally {
                                                                         setAddingTo(null);
                                                                         setSelectedRecipe('');
@@ -470,35 +473,75 @@ export const PlannerPage = () => {
                                                                 addNewLabel="Create new recipe..."
                                                             />
                                                             <button
-                                                                onClick={async () => {
-                                                                    if (plan) {
-                                                                        try {
-                                                                            await plannerService.deletePlanEntry(plan.id);
-                                                                            await loadData(days[0], days[10]);
-                                                                        } catch (err) {
-                                                                            console.error('Failed to delete meal:', err);
-                                                                        }
-                                                                    }
+                                                                onClick={() => {
                                                                     setAddingTo(null);
                                                                     setSelectedRecipe('');
                                                                 }}
-                                                                className="p-1 text-[10px] text-ink-400 hover:text-red-600 hover:bg-base-200 rounded flex items-center justify-center gap-1"
+                                                                className="p-1 text-[10px] text-ink-400 hover:text-ink-600 hover:bg-base-200 rounded flex items-center justify-center gap-1"
                                                             >
-                                                                <X size={10} /> {plan ? 'Delete' : 'Cancel'}
+                                                                <X size={10} /> Cancel
                                                             </button>
                                                         </div>
-                                                    ) : plan ? (
-                                                        <button
-                                                            onClick={() => setAddingTo({ date: day, meal: `${config.id}-${meal}` })}
-                                                            className="w-full h-full text-left group/meal flex flex-col justify-between"
-                                                        >
-                                                            <span className="text-[11px] font-semibold text-ink-900 line-clamp-3 leading-tight group-hover/meal:text-accent transition-colors">
-                                                                {currentRecipeName || 'Unknown Recipe'}
-                                                            </span>
-                                                            <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <Plus size={12} className="text-ink-300" />
+                                                    ) : hasPlans ? (
+                                                        <div className="h-full flex flex-col justify-between">
+                                                            <div className="space-y-1">
+                                                                {/* Show up to 2 recipes as chips, collapse rest */}
+                                                                {slotPlans.length <= 2 ? (
+                                                                    recipesInSlot.map(({ planId, name }) => (
+                                                                        <div key={planId} className="flex items-center gap-1 group/chip">
+                                                                            <span className="text-[11px] font-semibold text-ink-900 line-clamp-1 leading-tight flex-1">
+                                                                                {name}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={async (e) => {
+                                                                                    e.stopPropagation();
+                                                                                    try {
+                                                                                        await plannerService.deletePlanEntry(planId);
+                                                                                        await loadData(days[0], days[10]);
+                                                                                    } catch (err) {
+                                                                                        console.error('Failed to delete meal:', err);
+                                                                                    }
+                                                                                }}
+                                                                                className="p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400"
+                                                                            >
+                                                                                <X size={10} />
+                                                                            </button>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <>
+                                                                        <div className="flex items-center gap-1 group/chip">
+                                                                            <span className="text-[11px] font-semibold text-ink-900 line-clamp-1 leading-tight flex-1">
+                                                                                {recipesInSlot[0].name}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={async (e) => {
+                                                                                    e.stopPropagation();
+                                                                                    try {
+                                                                                        await plannerService.deletePlanEntry(recipesInSlot[0].planId);
+                                                                                        await loadData(days[0], days[10]);
+                                                                                    } catch (err) {
+                                                                                        console.error('Failed to delete meal:', err);
+                                                                                    }
+                                                                                }}
+                                                                                className="p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400"
+                                                                            >
+                                                                                <X size={10} />
+                                                                            </button>
+                                                                        </div>
+                                                                        <span className="text-[10px] text-ink-400">
+                                                                            +{slotPlans.length - 1} more recipe{slotPlans.length > 2 ? 's' : ''}
+                                                                        </span>
+                                                                    </>
+                                                                )}
                                                             </div>
-                                                        </button>
+                                                            <button
+                                                                onClick={() => setAddingTo({ date: day, meal: `${config.id}-${meal}` })}
+                                                                className="flex items-center justify-end gap-1 text-[10px] text-accent mt-1 hover:text-accent/80"
+                                                            >
+                                                                <Plus size={10} /> Add
+                                                            </button>
+                                                        </div>
                                                     ) : (
                                                         <button
                                                             onClick={() => setAddingTo({ date: day, meal: `${config.id}-${meal}` })}
