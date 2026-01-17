@@ -112,30 +112,37 @@ export const MagicImportModal = ({ isOpen, onClose, onSuccess }: MagicImportModa
             setStatusMessage('Saving recipe and creating list...');
 
             // 1. Create List
-            // We'll create a list named "[Recipe Name] Ingredients"
-            const listName = `${recipeData.name} Ingredients`;
+            const listName = recipeData.name;
             const listData = await listService.createList(listName);
 
-            // 2. Add Items
-            // We only add items we could map to a grocery type for now. 
-            // Ideally we'd create new types or ask user, but for MVP we skip unmapped? 
-            // Or maybe we pick a default "Misc" type if available?
-            // PRD says: "MVP: Create new unmatched grocery types automatically or flag for review"
-            // Let's just create them if they don't exist? That's risky for duplicate data.
-            // Let's filter for now and maybe alert user about unmapped items in a real app.
+            // 2. Add Items - create new grocery types for unmapped ingredients
+            const addItemPromises = recipeData.ingredients.map(async (ing) => {
+                let groceryTypeId = ing.groceryTypeId;
 
-            const promises = recipeData.ingredients
-                .filter(ing => ing.groceryTypeId)
-                .map(ing =>
-                    listService.addListItem(
+                // If no match, create a new grocery type
+                if (!groceryTypeId) {
+                    const { data: newType } = await supabase
+                        .from('grocery_types')
+                        .insert({ name: ing.name })
+                        .select('id')
+                        .single();
+
+                    if (newType) {
+                        groceryTypeId = newType.id;
+                    }
+                }
+
+                if (groceryTypeId) {
+                    await listService.addListItem(
                         listData.id,
-                        ing.groceryTypeId!,
+                        groceryTypeId,
                         ing.quantity,
                         ing.unit
-                    )
-                );
+                    );
+                }
+            });
 
-            await Promise.all(promises);
+            await Promise.all(addItemPromises);
 
             // 3. Create Recipe
             // Note: recipeService.createRecipe does step 1 internally optionally, but we did it manually to control items.
@@ -249,7 +256,7 @@ export const MagicImportModal = ({ isOpen, onClose, onSuccess }: MagicImportModa
                             <div className="space-y-3">
                                 <label className="block text-xs font-bold text-ink-400 uppercase tracking-wider">Recipe Name</label>
                                 <input
-                                    className="w-full font-serif text-2xl font-bold text-ink-900 bg-transparent border-b border-dashed border-base-300 focus:border-accent outline-none pb-1"
+                                    className="w-full text-xl font-semibold text-ink-900 bg-transparent border-b border-dashed border-base-300 focus:border-accent outline-none pb-1"
                                     value={recipeData.name}
                                     onChange={(e) => setRecipeData({ ...recipeData, name: e.target.value })}
                                 />
@@ -330,6 +337,17 @@ export const MagicImportModal = ({ isOpen, onClose, onSuccess }: MagicImportModa
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+
+                            {/* Instructions */}
+                            <div>
+                                <h3 className="font-bold text-ink-800 mb-3">Instructions</h3>
+                                <textarea
+                                    className="w-full p-3 bg-base-50 border border-base-200 rounded-lg text-sm text-ink-700 resize-none focus:border-accent focus:ring-1 focus:ring-accent outline-none"
+                                    rows={6}
+                                    value={recipeData.instructions}
+                                    onChange={(e) => setRecipeData({ ...recipeData, instructions: e.target.value })}
+                                />
                             </div>
 
                         </div>
