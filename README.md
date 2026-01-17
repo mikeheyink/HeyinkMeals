@@ -1,4 +1,5 @@
 # React + TypeScript + Vite
+[![Deploy Supabase Functions](https://github.com/mikeheyink/HeyinkMeals/actions/workflows/deploy-supabase.yaml/badge.svg)](https://github.com/mikeheyink/HeyinkMeals/actions/workflows/deploy-supabase.yaml)
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
