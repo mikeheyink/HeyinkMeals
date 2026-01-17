@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-// Trigger deployment
 import { cheerio } from "https://deno.land/x/cheerio@1.0.7/mod.ts";
-import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.1.3";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -58,14 +56,11 @@ serve(async (req) => {
         // Collapse whitespace
         cleanText = cleanText.replace(/\s+/g, ' ').trim().slice(0, 15000); // Limit context window just in case
 
-        // 3. Configure Gemini
+        // 3. Call Gemini API directly (No SDK dependency)
         const apiKey = Deno.env.get('GEMINI_API_KEY');
         if (!apiKey) {
             throw new Error("GEMINI_API_KEY is not set");
         }
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // or gemini-2.0-flash-exp
 
         const prompt = `
     You are a culinary AI expert. Extract the recipe details from the following text content scraped from a website.
@@ -80,39 +75,62 @@ serve(async (req) => {
        - stick of butter -> grams (1 stick = 113g)
        - Fahrenheit -> Celsius
     3. Return strictly VALID JSON with no additional formatting or code blocks.
+    4. Do not include markdown formatting like \`\`\`json.
     
     JSON Schema:
     {
-      "found": boolean, // true if a recipe was found
+      "found": boolean, 
       "data": {
         "name": string,
-        "description": string, // brief summary
+        "description": string,
         "servings": number,
-        "prepTimeMinutes": number, // estimate if missing
-        "cookTimeMinutes": number, // estimate if missing
+        "prepTimeMinutes": number,
+        "cookTimeMinutes": number,
         "ingredients": [
           {
-            "originalText": string, // line as it appeared or close to it
+            "originalText": string,
             "quantity": number,
-            "unit": string, // e.g. "g", "ml", "tbsp", "cup", "tsp", "each"
-            "name": string // clean name of ingredient
+            "unit": string,
+            "name": string
           }
         ],
-        "instructions": string // Markdown formatted string of steps
+        "instructions": string
       },
-      "error": string // optional error message if not found
+      "error": string
     }
 
     Content:
     ${cleanText}
     `;
 
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+        const aiResponse = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: prompt }]
+                }]
+            })
+        });
+
+        if (!aiResponse.ok) {
+            const errorText = await aiResponse.text();
+            throw new Error(`Gemini API Error: ${aiResponse.status} ${errorText}`);
+        }
+
+        const aiData = await aiResponse.json();
+        // Access the response text safely
+        const candidate = aiData.candidates?.[0];
+        const part = candidate?.content?.parts?.[0];
+        const responseText = part?.text || "{}";
 
         console.log("AI Response:", responseText);
 
-        // Clean up potential markdown code fences from the AI response
+        // Clean up potential markdown code fences from the AI response (just in case)
         const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         const data = JSON.parse(jsonString);
 
