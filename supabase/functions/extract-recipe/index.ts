@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { cheerio } from "https://deno.land/x/cheerio@1.0.7/mod.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -33,24 +33,24 @@ serve(async (req) => {
 
         const html = await response.text();
 
-        // 2. Parse interesting content using Cheerio to reduce token usage
-        const $ = cheerio.load(html);
+        // 2. Parse using Deno DOM
+        const doc = new DOMParser().parseFromString(html, "text/html");
 
-        // Remove scripts, styles, and other noise
-        $('script').remove();
-        $('style').remove();
-        $('nav').remove();
-        $('footer').remove();
-        $('header').remove();
-        $('.comments').remove();
-        $('.sidebar').remove();
-        $('.ad').remove();
+        if (!doc) {
+            throw new Error("Failed to parse HTML");
+        }
 
-        // Get text content, hopefully focusing on the recipe
-        // We try to grab the main content if possible, or just body
-        let cleanText = $('main').text();
+        // Cleanup
+        const selectorsToRemove = ['script', 'style', 'nav', 'footer', 'header', '.comments', '.sidebar', '.ad'];
+        selectorsToRemove.forEach(selector => {
+            const elements = doc.querySelectorAll(selector);
+            elements.forEach(el => el.remove());
+        });
+
+        // Get text content
+        let cleanText = doc.querySelector('main')?.textContent || '';
         if (cleanText.length < 500) {
-            cleanText = $('body').text();
+            cleanText = doc.body?.textContent || '';
         }
 
         // Collapse whitespace
