@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -33,28 +32,10 @@ serve(async (req) => {
 
         const html = await response.text();
 
-        // 2. Parse using Deno DOM
-        const doc = new DOMParser().parseFromString(html, "text/html");
-
-        if (!doc) {
-            throw new Error("Failed to parse HTML");
-        }
-
-        // Cleanup
-        const selectorsToRemove = ['script', 'style', 'nav', 'footer', 'header', '.comments', '.sidebar', '.ad'];
-        selectorsToRemove.forEach(selector => {
-            const elements = doc.querySelectorAll(selector);
-            elements.forEach(el => el.remove());
-        });
-
-        // Get text content
-        let cleanText = doc.querySelector('main')?.textContent || '';
-        if (cleanText.length < 500) {
-            cleanText = doc.body?.textContent || '';
-        }
-
-        // Collapse whitespace
-        cleanText = cleanText.replace(/\s+/g, ' ').trim().slice(0, 15000); // Limit context window just in case
+        // 2. Pass raw HTML directly to Gemini (no DOM parsing library needed)
+        // Gemini 1.5 Flash handles messy HTML well with its large context window
+        // We just truncate to a reasonable size
+        const truncatedHtml = html.slice(0, 30000);
 
         // 3. Call Gemini API directly (No SDK dependency)
         const apiKey = Deno.env.get('GEMINI_API_KEY');
@@ -63,19 +44,20 @@ serve(async (req) => {
         }
 
         const prompt = `
-    You are a culinary AI expert. Extract the recipe details from the following text content scraped from a website.
+    You are a culinary AI expert. Extract the recipe details from the following RAW HTML content scraped from a recipe website.
     
     Rules:
-    1. Extract the Name, Servings, Prep Time (in minutes), Cook Time (in minutes), Ingredients, and Instructions.
-    2. Convert all ingredient units to South African Metric standards where possible:
+    1. Parse the HTML to find the recipe content. Ignore navigation, ads, comments, and other non-recipe content.
+    2. Extract the Name, Servings, Prep Time (in minutes), Cook Time (in minutes), Ingredients, and Instructions.
+    3. Convert all ingredient units to South African Metric standards where possible:
        - oz -> g (approx 28g per oz)
        - lb -> g or kg
        - fluid oz -> ml
        - cups -> ml (check context, if flour 1 cup ~= 120g, if liquid 1 cup ~= 250ml. If unsure keeping 'cup' is okay but prefer metric).
        - stick of butter -> grams (1 stick = 113g)
        - Fahrenheit -> Celsius
-    3. Return strictly VALID JSON with no additional formatting or code blocks.
-    4. Do not include markdown formatting like \`\`\`json.
+    4. Return strictly VALID JSON with no additional formatting or code blocks.
+    5. Do not include markdown formatting like \`\`\`json.
     
     JSON Schema:
     {
@@ -99,8 +81,8 @@ serve(async (req) => {
       "error": string
     }
 
-    Content:
-    ${cleanText}
+    Raw HTML:
+    ${truncatedHtml}
     `;
 
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
