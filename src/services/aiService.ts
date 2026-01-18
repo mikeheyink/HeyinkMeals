@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 export interface CommandResult {
     success: boolean;
     message: string;
+    actionTaken: boolean; // true if AI actually performed an action, false if just a question/response
 }
 
 export interface CommandContext {
@@ -28,13 +29,16 @@ export const aiService = {
             console.error('Command agent error:', error);
             return {
                 success: false,
-                message: error.message || 'Failed to process command'
+                message: error.message || 'Failed to process command',
+                actionTaken: false
             };
         }
 
         return {
             success: data.success ?? true,
-            message: data.message || 'Done'
+            message: data.message || 'Done',
+            actionTaken: data.actionTaken ?? false
         };
     }
 };
+

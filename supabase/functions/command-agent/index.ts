@@ -369,16 +369,18 @@ Only call ONE function per request. Choose the most appropriate action.`;
                     result = { success: false, message: `Unknown function: ${name}` };
             }
 
-            return new Response(JSON.stringify(result), {
+            // Add actionTaken flag to the result
+            return new Response(JSON.stringify({ ...result, actionTaken: true }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
 
-        // If no function call, return the text response
+        // If no function call, return the text response (no action taken - could be clarifying question)
         const textResponse = part?.text || "I'm not sure how to help with that.";
         return new Response(JSON.stringify({
             success: true,
-            message: textResponse
+            message: textResponse,
+            actionTaken: false
         }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
