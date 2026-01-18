@@ -11,14 +11,27 @@ export interface CommandContext {
     entityId?: string;
 }
 
+export interface ChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
 export const aiService = {
     /**
      * Send a natural language command to the AI agent
+     * @param command - The current user message
+     * @param history - Previous messages in the conversation (for multi-turn)
+     * @param context - Page context
      */
-    async executeCommand(command: string, context?: CommandContext): Promise<CommandResult> {
+    async executeCommand(
+        command: string,
+        history: ChatMessage[] = [],
+        context?: CommandContext
+    ): Promise<CommandResult> {
         const { data, error } = await supabase.functions.invoke('command-agent', {
             body: {
                 command,
+                history,
                 context: context || {
                     page: window.location.pathname
                 }
@@ -41,4 +54,3 @@ export const aiService = {
         };
     }
 };
-

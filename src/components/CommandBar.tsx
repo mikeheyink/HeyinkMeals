@@ -67,12 +67,19 @@ export const CommandBar = ({ onCommandExecuted }: CommandBarProps) => {
         if (!command.trim() || state === 'processing') return;
 
         const userMessage = command.trim();
-        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+        const newMessages = [...messages, { role: 'user' as const, content: userMessage }];
+        setMessages(newMessages);
         setCommand('');
         setState('processing');
 
         try {
-            const result = await aiService.executeCommand(userMessage);
+            // Convert messages to history format (exclude isAction field)
+            const history = messages.map(m => ({
+                role: m.role,
+                content: m.content
+            }));
+
+            const result = await aiService.executeCommand(userMessage, history);
 
             setMessages(prev => [...prev, {
                 role: 'assistant',

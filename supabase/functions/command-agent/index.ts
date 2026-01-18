@@ -373,7 +373,7 @@ serve(async (req) => {
     }
 
     try {
-        const { command, context } = await req.json();
+        const { command, history, context } = await req.json();
 
         if (!command) {
             throw new Error("Command is required");
@@ -446,13 +446,27 @@ IMPORTANT: When removing meals, look at the current meal plan below. If there's 
         // Call Gemini with function calling
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
+        // Build conversation contents from history + current command
+        const contents: any[] = [];
+
+        // Add previous messages from history
+        if (history && Array.isArray(history)) {
+            for (const msg of history) {
+                contents.push({
+                    role: msg.role === 'user' ? 'user' : 'model',
+                    parts: [{ text: msg.content }]
+                });
+            }
+        }
+
+        // Add current user message
+        contents.push({ role: 'user', parts: [{ text: command }] });
+
         const geminiResponse = await fetch(geminiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [
-                    { role: 'user', parts: [{ text: command }] }
-                ],
+                contents,
                 systemInstruction: { parts: [{ text: systemPrompt }] },
                 tools: [{ functionDeclarations: TOOLS }]
             })
