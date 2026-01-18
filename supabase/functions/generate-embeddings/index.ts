@@ -70,8 +70,9 @@ serve(async (req) => {
 
                     // Rate limiting
                     await new Promise(r => setTimeout(r, 100));
-                } catch (err) {
-                    results.errors.push(`Recipe ${recipe.name}: ${err.message}`);
+                } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    results.errors.push(`Recipe ${recipe.name}: ${message}`);
                 }
             }
         }
@@ -97,8 +98,9 @@ serve(async (req) => {
                     console.log(`✓ Grocery: ${grocery.name}`);
 
                     await new Promise(r => setTimeout(r, 100));
-                } catch (err) {
-                    results.errors.push(`Grocery ${grocery.name}: ${err.message}`);
+                } catch (err: unknown) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    results.errors.push(`Grocery ${grocery.name}: ${message}`);
                 }
             }
         }
@@ -111,11 +113,12 @@ serve(async (req) => {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
 
-    } catch (error) {
+    } catch (error: unknown) {
         console.error(error);
+        const message = error instanceof Error ? error.message : String(error);
         return new Response(JSON.stringify({
             success: false,
-            message: error.message
+            message
         }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400
