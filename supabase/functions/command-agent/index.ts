@@ -24,15 +24,17 @@ const TOOLS = [
     },
     {
         name: "remove_meal",
-        description: "Remove a planned meal from the meal planner",
+        description: "Remove a planned meal from the meal planner. Use entry_id if you know it from the current meal plan context, otherwise use date/slot/diners to find it.",
         parameters: {
             type: "object",
             properties: {
-                date: { type: "string", description: "Date in YYYY-MM-DD format" },
-                slot: { type: "string", enum: ["Breakfast", "Lunch", "Dinner"] },
-                diners: { type: "string", enum: ["Everyone", "Parents", "Children"] }
+                entry_id: { type: "string", description: "The meal plan entry ID (UUID) if known from context" },
+                date: { type: "string", description: "Date in YYYY-MM-DD format. Use if entry_id is not known." },
+                slot: { type: "string", enum: ["Breakfast", "Lunch", "Dinner"], description: "The meal slot" },
+                diners: { type: "string", enum: ["Everyone", "Parents", "Children"], description: "Who the meal is for" },
+                recipe_name: { type: "string", description: "Name of the recipe to remove (helps disambiguate if multiple meals on same day)" }
             },
-            required: ["date", "slot"]
+            required: []
         }
     },
     {
@@ -164,6 +166,80 @@ async function executePlanMeal(args: any, supabase: any, apiKey: string) {
         success: true,
         message: `Planned "${recipe.name}" for ${diners} on ${parsedDate} (${slot})`
     };
+}
+
+async function executeRemoveMeal(args: any, supabase: any) {
+    const { entry_id, date, slot, diners, recipe_name } = args;
+
+    // If we have an entry_id, use it directly
+    if (entry_id) {
+        const { error } = await supabase
+            .from('meal_plan_entries')
+            .delete()
+            .eq('id', entry_id);
+
+        if (error) {
+            return { success: false, message: `Failed to remove meal: ${error.message}` };
+        }
+
+        return { success: true, message: `Removed the meal from the planner` };
+    }
+
+    // Otherwise, search for the entry
+    const parsedDate = date ? parseDate(date) : null;
+
+    let query = supabase
+        .from('meal_plan_entries')
+        .select(`
+            id,
+            date,
+            slot,
+            diners,
+            recipe:recipe_id (name)
+        `);
+
+    if (parsedDate) query = query.eq('date', parsedDate);
+    if (slot) query = query.eq('slot', slot);
+    if (diners) query = query.eq('diner_type', diners);
+
+    const { data: entries, error: searchError } = await query;
+
+    if (searchError || !entries || entries.length === 0) {
+        return { success: false, message: `No matching meal found to remove` };
+    }
+
+    // If recipe_name provided, filter by it
+    let toRemove = entries;
+    if (recipe_name) {
+        toRemove = entries.filter((e: any) =>
+            e.recipe?.name?.toLowerCase().includes(recipe_name.toLowerCase())
+        );
+    }
+
+    if (toRemove.length === 0) {
+        return { success: false, message: `No meal found matching "${recipe_name}"` };
+    }
+
+    if (toRemove.length > 1) {
+        const list = toRemove.map((e: any) => `- ${e.recipe?.name || 'Unknown'} (${e.slot})`).join('\n');
+        return {
+            success: false,
+            message: `Found multiple meals. Please be more specific:\n${list}`
+        };
+    }
+
+    // Remove the single match
+    const { error: deleteError } = await supabase
+        .from('meal_plan_entries')
+        .delete()
+        .eq('id', toRemove[0].id);
+
+    if (deleteError) {
+        return { success: false, message: `Failed to remove meal: ${deleteError.message}` };
+    }
+
+    const removedName = toRemove[0].recipe?.name || 'Unknown';
+    return { success: true, message: `Removed "${removedName}" from ${toRemove[0].slot} on ${toRemove[0].date}` };
 }
 
 async function executeMarkItemPurchased(args: any, supabase: any, apiKey: string) {
@@ -315,12 +391,57 @@ serve(async (req) => {
         console.log(`Command: ${command}`);
         console.log(`Context:`, context);
 
-        // Build the system prompt
+        // Fetch current meal plan context (this week and next)
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+        const endOfNextWeek = new Date(startOfWeek);
+        endOfNextWeek.setDate(startOfWeek.getDate() + 13); // Two weeks ahead
+
+        const { data: mealPlanEntries } = await supabase
+            .from('meal_plan_entries')
+            .select(`
+                id,
+                date,
+                slot,
+                diners,
+                recipe:recipe_id (
+                    id,
+                    name
+                )
+            `)
+            .gte('date', startOfWeek.toISOString().split('T')[0])
+            .lte('date', endOfNextWeek.toISOString().split('T')[0])
+            .order('date', { ascending: true });
+
+        // Format meal plan context for the AI
+        let mealPlanContext = '';
+        if (mealPlanEntries && mealPlanEntries.length > 0) {
+            const planByDate: Record<string, any[]> = {};
+            for (const entry of mealPlanEntries) {
+                if (!planByDate[entry.date]) planByDate[entry.date] = [];
+                planByDate[entry.date].push(entry);
+            }
+
+            mealPlanContext = '\n\nCURRENT MEAL PLAN:\n';
+            for (const [date, entries] of Object.entries(planByDate)) {
+                const dayName = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+                mealPlanContext += `${dayName}:\n`;
+                for (const entry of entries) {
+                    const recipeName = entry.recipe?.name || 'Unknown';
+                    mealPlanContext += `  - ${entry.slot} (${entry.diners}): ${recipeName} [id: ${entry.id}]\n`;
+                }
+            }
+        }
+
+        // Build the system prompt with context
         const systemPrompt = `You are a helpful meal planning assistant for a family meal app. 
 Today's date is ${new Date().toISOString().split('T')[0]}.
 When the user says "us" or "we", they mean "Parents".
 When planning meals, default to "Parents" unless specifically mentioned.
-Only call ONE function per request. Choose the most appropriate action.`;
+Only call ONE function per request. Choose the most appropriate action.
+
+IMPORTANT: When removing meals, look at the current meal plan below. If there's only one meal on a given day matching the user's description, you have enough info to remove it - don't ask for the slot.${mealPlanContext}`;
 
         // Call Gemini with function calling
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
@@ -356,6 +477,9 @@ Only call ONE function per request. Choose the most appropriate action.`;
                 case 'plan_meal':
                     result = await executePlanMeal(args, supabase, apiKey);
                     break;
+                case 'remove_meal':
+                    result = await executeRemoveMeal(args, supabase);
+                    break;
                 case 'mark_item_purchased':
                     result = await executeMarkItemPurchased(args, supabase, apiKey);
                     break;
@@ -385,11 +509,12 @@ Only call ONE function per request. Choose the most appropriate action.`;
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
 
-    } catch (error) {
+    } catch (error: unknown) {
         console.error(error);
+        const message = error instanceof Error ? error.message : String(error);
         return new Response(JSON.stringify({
             success: false,
-            message: error.message
+            message
         }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400
