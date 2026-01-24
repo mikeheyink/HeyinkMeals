@@ -30,6 +30,13 @@ export const ShoppingListPage = () => {
 
     useEffect(() => {
         loadList();
+
+        // Listen for command bar actions (e.g. "Add milk to shopping list")
+        const handleCommandRefresh = () => {
+            loadList();
+        };
+        window.addEventListener('commandbar:action-completed', handleCommandRefresh);
+        return () => window.removeEventListener('commandbar:action-completed', handleCommandRefresh);
     }, []);
 
     const handleToggle = async (itemId: string, field: 'is_purchased' | 'is_in_stock', current: boolean) => {

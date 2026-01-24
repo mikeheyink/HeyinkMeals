@@ -78,6 +78,13 @@ export const PlannerPage = () => {
         const week = Array.from({ length: 11 }, (_, i) => addDays(anchorDate, i));
         setDays(week);
         loadData(week[0], week[10]);
+
+        // Listen for command bar actions (e.g. "Plan pasta for Tuesday")
+        const handleCommandRefresh = () => {
+            loadData(week[0], week[10]);
+        };
+        window.addEventListener('commandbar:action-completed', handleCommandRefresh);
+        return () => window.removeEventListener('commandbar:action-completed', handleCommandRefresh);
     }, [anchorDate, isLoadingAnchor]);
 
     // Navigation handlers
