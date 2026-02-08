@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { groceryListService } from '../../services/groceryListService';
 import type { GroceryListWithRecipe, GroceryListsGrouped } from '../../services/groceryListService';
 import { Button } from '../../components/ui/Button';
-import { Plus, List, BookOpen, Package, Wand2 } from 'lucide-react';
+import { Plus, List, BookOpen, Package } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { GroceryListModal } from '../../components/GroceryListModal';
-import { MagicImportModal } from '../../components/MagicImportModal';
 import { Card } from '../../components/ui/Card';
 
 export const RecipeListPage = () => {
@@ -13,7 +12,6 @@ export const RecipeListPage = () => {
     const [loading, setLoading] = useState(true);
     const [selectedList, setSelectedList] = useState<GroceryListWithRecipe | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     useEffect(() => {
         fetchLists();
@@ -117,14 +115,9 @@ export const RecipeListPage = () => {
                 title="Grocery Lists"
                 subtitle={`${totalLists} lists organized by recipe association.`}
                 actions={
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => setIsImportModalOpen(true)} icon={Wand2}>
-                            Import Recipe
-                        </Button>
-                        <Button onClick={() => { /* TODO: Add new list modal */ }} icon={Plus}>
-                            New List
-                        </Button>
-                    </div>
+                    <Button onClick={() => { /* TODO: Add new list modal */ }} icon={Plus}>
+                        New List
+                    </Button>
                 }
             />
 
@@ -210,12 +203,6 @@ export const RecipeListPage = () => {
                 onClose={handleModalClose}
                 onUpdate={handleUpdate}
                 groceryList={selectedList}
-            />
-
-            <MagicImportModal
-                isOpen={isImportModalOpen}
-                onClose={() => setIsImportModalOpen(false)}
-                onSuccess={handleUpdate}
             />
         </div>
     );

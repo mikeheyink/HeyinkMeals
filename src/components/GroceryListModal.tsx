@@ -63,6 +63,9 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
+    // Error state
+    const [error, setError] = useState<string | null>(null);
+
     const modalRef = useRef<HTMLDivElement>(null);
     useFocusTrap({ isOpen, onClose, containerRef: modalRef });
 
@@ -72,6 +75,7 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
             loadGroceries();
             setConfirmDelete(false);
             setShowAddRecipe(false);
+            setError(null);
         }
     }, [isOpen, groceryList?.id]);
 
@@ -102,35 +106,43 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
     const handleAddItem = async () => {
         if (!groceryList || !selectedGrocery) return;
         setAddingItem(true);
+        setError(null);
         try {
             await groceryListService.addItem(groceryList.id, selectedGrocery, quantity, unit);
             await loadDetails();
             setQuantity(1);
             setUnit('items');
+            onUpdate();
         } catch (e) {
             console.error('Failed to add item:', e);
+            setError('Failed to add item. Please try again.');
         } finally {
             setAddingItem(false);
         }
     };
 
     const handleDeleteItem = async (itemId: string) => {
+        setError(null);
         try {
             await groceryListService.deleteItem(itemId);
             setItems(items.filter(i => i.id !== itemId));
+            onUpdate();
         } catch (e) {
             console.error('Failed to delete item:', e);
+            setError('Failed to delete item. Please try again.');
         }
     };
 
     const handleClearRecipe = async () => {
         if (!recipe) return;
+        setError(null);
         try {
             await groceryListService.clearRecipe(recipe.id);
             setRecipe(null);
             onUpdate();
         } catch (e) {
             console.error('Failed to clear recipe:', e);
+            setError('Failed to clear recipe. Please try again.');
         }
     };
 
@@ -150,6 +162,7 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
             onUpdate();
         } catch (e) {
             console.error('Failed to create recipe:', e);
+            setError('Failed to create recipe. Please try again.');
         } finally {
             setSavingRecipe(false);
         }
@@ -164,6 +177,7 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
             onClose();
         } catch (e) {
             console.error('Failed to delete list:', e);
+            setError('Failed to delete list. Please try again.');
         } finally {
             setDeleting(false);
         }
@@ -194,6 +208,14 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                    {error && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center justify-between">
+                            <span>{error}</span>
+                            <button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded">
+                                <X size={14} />
+                            </button>
+                        </div>
+                    )}
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <Loader2 className="animate-spin text-accent" size={32} />
@@ -267,6 +289,7 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
                                             };
 
                                             const saveEdit = async () => {
+                                                setError(null);
                                                 try {
                                                     await groceryListService.updateItem(item.id, {
                                                         quantity: editQuantity,
@@ -280,8 +303,10 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
                                                             : i
                                                     ));
                                                     setEditingItemId(null);
+                                                    onUpdate();
                                                 } catch (e) {
                                                     console.error('Failed to update item:', e);
+                                                    setError('Failed to update item. Please try again.');
                                                 }
                                             };
 

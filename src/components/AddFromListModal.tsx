@@ -17,6 +17,7 @@ export function AddFromListModal({ isOpen, onClose, onItemsAdded }: AddFromListM
     const [selectedListId, setSelectedListId] = useState('');
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const modalRef = useRef<HTMLDivElement>(null);
 
     useFocusTrap({ isOpen, onClose, containerRef: modalRef });
@@ -25,6 +26,7 @@ export function AddFromListModal({ isOpen, onClose, onItemsAdded }: AddFromListM
         if (isOpen) {
             loadLists();
             setSelectedListId('');
+            setError(null);
         }
     }, [isOpen]);
 
@@ -43,12 +45,14 @@ export function AddFromListModal({ isOpen, onClose, onItemsAdded }: AddFromListM
     const handleAdd = async () => {
         if (!selectedListId) return;
         setSubmitting(true);
+        setError(null);
         try {
             await plannerService.addListItemsToShoppingList(selectedListId);
             onItemsAdded();
             onClose();
         } catch (e) {
             console.error('Failed to add list items', e);
+            setError('Failed to add items. Please try again.');
         } finally {
             setSubmitting(false);
         }
@@ -75,6 +79,11 @@ export function AddFromListModal({ isOpen, onClose, onItemsAdded }: AddFromListM
                 </div>
 
                 <div className="p-5 space-y-4">
+                    {error && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                            {error}
+                        </div>
+                    )}
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-ink-500 uppercase tracking-wider">
                             Select List

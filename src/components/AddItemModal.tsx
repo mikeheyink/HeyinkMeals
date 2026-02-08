@@ -24,6 +24,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
     const [categories, setCategories] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [adding, setAdding] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [quantity, setQuantity] = useState(1);
     const [unit, setUnit] = useState('item');
     const [newItemCategory, setNewItemCategory] = useState<string>('');
@@ -42,6 +43,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
             setUnit('item');
             setNewItemCategory('');
             setHighlightedIndex(-1);
+            setError(null);
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [isOpen]);
@@ -115,11 +117,13 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
 
     const handleSelectItem = async (groceryId: string) => {
         setAdding(true);
+        setError(null);
         try {
             await plannerService.addManualItem(groceryId, quantity, unit);
             onItemAdded();
         } catch (e) {
             console.error(e);
+            setError('Failed to add item. Please try again.');
         } finally {
             setAdding(false);
         }
@@ -128,6 +132,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
     const handleAddNewItem = async () => {
         if (!search.trim() || !newItemCategory) return;
         setAdding(true);
+        setError(null);
         try {
             // Create the grocery type first with selected category
             const newGrocery = await pantryService.addGrocery(search.trim(), newItemCategory);
@@ -137,6 +142,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
             onItemAdded();
         } catch (e) {
             console.error(e);
+            setError('Failed to add item. Please try again.');
         } finally {
             setAdding(false);
         }
@@ -164,6 +170,13 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
                         <X size={20} />
                     </button>
                 </div>
+
+                {/* Error Banner */}
+                {error && (
+                    <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                        {error}
+                    </div>
+                )}
 
                 {/* Search Input */}
                 <div className="p-4 border-b border-base-300">

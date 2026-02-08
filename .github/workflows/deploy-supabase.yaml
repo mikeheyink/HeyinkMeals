@@ -24,7 +24,6 @@ jobs:
           version: latest
 
       - run: |
-          supabase functions deploy extract-recipe --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt
           supabase functions deploy command-agent --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt
           supabase functions deploy generate-embeddings --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt
           supabase secrets set GEMINI_API_KEY=$GEMINI_API_KEY --project-ref $SUPABASE_PROJECT_ID
