@@ -7,12 +7,10 @@ import { PlannerPage } from './pages/planner/PlannerPage';
 import { ShoppingListPage } from './pages/planner/ShoppingListPage';
 import { CookingPage } from './pages/cooking/CookingPage';
 import { CookingMode } from './pages/cooking/CookingMode';
-import { CommandBar } from './components/CommandBar';
 
 function App() {
   return (
     <>
-      <CommandBar />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
