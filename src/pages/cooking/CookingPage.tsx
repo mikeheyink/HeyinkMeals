@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { format, addDays, startOfDay, isToday } from 'date-fns';
 import { plannerService } from '../../services/plannerService';
 import { preferencesService } from '../../services/preferencesService';
 import type { PlannerConfigItem } from '../../services/preferencesService';
 import { Button } from '../../components/ui/Button';
-import { ChefHat, ChevronRight, BookOpen } from 'lucide-react';
+import { ChefHat, ChevronRight, ChevronLeft, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { MobileCookingView } from '../../components/MobileCookingView';
@@ -22,8 +22,10 @@ export const CookingPage = () => {
     const [plans, setPlans] = useState<any[]>([]);
     const [recipes, setRecipes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [anchorDate, setAnchorDate] = useState<Date>(startOfDay(new Date()));
+    const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Load config from database
     const [plannerConfig, setPlannerConfig] = useState<PlannerConfigItem[]>(DEFAULT_PLANNER_CONFIG);
 
     useEffect(() => {
@@ -32,13 +34,34 @@ export const CookingPage = () => {
         });
     }, []);
 
-    useEffect(() => {
-        const today = startOfDay(new Date());
-        // Focused 3-day view: Yesterday, Today, Tomorrow
-        const range = [addDays(today, -1), today, addDays(today, 1)];
-        setDays(range);
-        loadData(range[0], range[2]);
+    const saveAnchorDebounced = useCallback((date: Date) => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        saveTimeoutRef.current = setTimeout(() => {
+            preferencesService.setPlannerViewportAnchor(format(date, 'yyyy-MM-dd'));
+        }, 500);
     }, []);
+
+    const navigateWeek = (direction: 'prev' | 'next') => {
+        const offset = direction === 'prev' ? -7 : 7;
+        const newAnchor = startOfDay(addDays(anchorDate, offset));
+        setAnchorDate(newAnchor);
+        saveAnchorDebounced(newAnchor);
+    };
+
+    const jumpToToday = () => {
+        const today = startOfDay(new Date());
+        setAnchorDate(today);
+        setSelectedDate(today);
+        saveAnchorDebounced(today);
+    };
+
+    useEffect(() => {
+        const week = Array.from({ length: 7 }, (_, i) => addDays(anchorDate, i));
+        setDays(week);
+        loadData(week[0], week[6]);
+    }, [anchorDate]);
 
     const loadData = async (start: Date, end: Date) => {
         setLoading(true);
@@ -57,20 +80,45 @@ export const CookingPage = () => {
         }
     };
 
-    const getPlanForSlot = (date: Date, mealType: string, dinerType: string) => {
+    const getPlansForSlot = (date: Date, mealType: string, dinerType: string) => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        return plans.find(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
+        return plans.filter(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
     };
 
     const activeConfigs = plannerConfig.filter(c => c.slots.length > 0);
     const totalActiveSlots = activeConfigs.reduce((sum, c) => sum + c.slots.length, 0);
     const isMobile = useIsMobile();
+    const viewContainsToday = days.some(d => isToday(d));
 
     return (
         <div className="space-y-8">
             <PageHeader
                 title="Cooking Terminal"
                 subtitle="Execute your culinary sequence with focus."
+                actions={!isMobile ? (
+                    <div className="flex items-center gap-1 bg-base-200/60 rounded-lg p-1">
+                        <button
+                            onClick={() => navigateWeek('prev')}
+                            className="p-1.5 rounded-md hover:bg-base-300 text-ink-500 hover:text-ink-900 transition-colors"
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+                        <button
+                            onClick={jumpToToday}
+                            className={`px-2 py-1 rounded-md text-xs font-semibold transition-colors ${
+                                viewContainsToday ? 'bg-accent text-white' : 'hover:bg-base-300 text-ink-500 hover:text-ink-900'
+                            }`}
+                        >
+                            Today
+                        </button>
+                        <button
+                            onClick={() => navigateWeek('next')}
+                            className="p-1.5 rounded-md hover:bg-base-300 text-ink-500 hover:text-ink-900 transition-colors"
+                        >
+                            <ChevronRight size={18} />
+                        </button>
+                    </div>
+                ) : undefined}
             />
 
             {loading ? (
@@ -83,6 +131,11 @@ export const CookingPage = () => {
                     plans={plans}
                     recipes={recipes}
                     activeConfigs={activeConfigs}
+                    anchorDate={anchorDate}
+                    selectedDate={selectedDate}
+                    onSelectDate={setSelectedDate}
+                    onNavigateWeek={navigateWeek}
+                    onJumpToToday={jumpToToday}
                 />
             ) : (
                 /* Desktop View */
@@ -141,34 +194,38 @@ export const CookingPage = () => {
                                 {/* Interaction Cells */}
                                 {activeConfigs.map((config) =>
                                     config.slots.map((meal) => {
-                                        const plan = getPlanForSlot(day, meal, config.id);
-                                        const recipeData = plan ? recipes.find(r => r.id === plan.reference_id) : null;
-                                        const currentRecipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
+                                        const slotPlans = getPlansForSlot(day, meal, config.id);
 
                                         return (
-                                            <div key={`${config.id}-${meal}`} className={`p-3 min-h-[120px] bg-white group border-r border-base-300 last:border-r-0 flex flex-col justify-between items-start transition-colors ${isToday(day) ? 'bg-accent/[0.01]' : ''}`}>
-                                                {plan ? (
-                                                    <>
-                                                        <div className="space-y-1">
-                                                            <div className="flex items-center gap-1.5 text-ink-300">
-                                                                <BookOpen size={10} />
-                                                                <span className="text-[9px] font-bold uppercase tracking-tight">{meal}</span>
+                                            <div key={`${config.id}-${meal}`} className={`p-3 min-h-[120px] bg-white group border-r border-base-300 last:border-r-0 flex flex-col justify-start items-start transition-colors gap-2 ${isToday(day) ? 'bg-accent/[0.01]' : ''}`}>
+                                                {slotPlans.length > 0 ? (
+                                                    slotPlans.map((plan) => {
+                                                        const recipeData = recipes.find(r => r.id === plan.reference_id);
+                                                        const currentRecipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
+                                                        return (
+                                                            <div key={plan.id} className="w-full">
+                                                                <div className="space-y-1">
+                                                                    <div className="flex items-center gap-1.5 text-ink-300">
+                                                                        <BookOpen size={10} />
+                                                                        <span className="text-[9px] font-bold uppercase tracking-tight">{meal}</span>
+                                                                    </div>
+                                                                    <span className="text-xs font-bold text-ink-900 line-clamp-2 leading-tight block">
+                                                                        {currentRecipeName}
+                                                                    </span>
+                                                                </div>
+                                                                <Button
+                                                                    onClick={() => navigate(`/cooking/${plan.id}`)}
+                                                                    variant="primary"
+                                                                    className="w-full mt-2 h-8 text-[10px] font-black uppercase tracking-widest py-0 px-2 justify-between group/btn"
+                                                                >
+                                                                    <span className="flex items-center gap-1">
+                                                                        <ChevronRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
+                                                                        Start
+                                                                    </span>
+                                                                </Button>
                                                             </div>
-                                                            <span className="text-xs font-bold text-ink-900 line-clamp-2 leading-tight">
-                                                                {currentRecipeName}
-                                                            </span>
-                                                        </div>
-                                                        <Button
-                                                            onClick={() => navigate(`/cooking/${plan.id}`)}
-                                                            variant="primary"
-                                                            className="w-full mt-2 h-8 text-[10px] font-black uppercase tracking-widest py-0 px-2 justify-between group/btn"
-                                                        >
-                                                            <span className="flex items-center gap-1">
-                                                                <ChevronRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
-                                                                Start
-                                                            </span>
-                                                        </Button>
-                                                    </>
+                                                        );
+                                                    })
                                                 ) : (
                                                     <div className="w-full h-full flex flex-col items-center justify-center opacity-20 select-none">
                                                         <ChefHat size={20} className="text-ink-300 mb-1" />
