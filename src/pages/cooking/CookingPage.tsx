@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { format, addDays, startOfDay, isToday } from 'date-fns';
+import { format, addDays, startOfDay, isToday, isSameDay } from 'date-fns';
 import { plannerService } from '../../services/plannerService';
 import { preferencesService } from '../../services/preferencesService';
 import type { PlannerConfigItem } from '../../services/preferencesService';
@@ -48,6 +48,21 @@ export const CookingPage = () => {
         const newAnchor = startOfDay(addDays(anchorDate, offset));
         setAnchorDate(newAnchor);
         saveAnchorDebounced(newAnchor);
+    };
+
+    const navigateDay = (direction: 'prev' | 'next') => {
+        const offset = direction === 'prev' ? -1 : 1;
+        const newDate = startOfDay(addDays(selectedDate, offset));
+        setSelectedDate(newDate);
+
+        const isInWindow = days.some(d => isSameDay(d, newDate));
+        if (!isInWindow) {
+            const newAnchor = direction === 'next'
+                ? newDate
+                : addDays(newDate, -6);
+            setAnchorDate(newAnchor);
+            saveAnchorDebounced(newAnchor);
+        }
     };
 
     const jumpToToday = () => {
@@ -135,6 +150,7 @@ export const CookingPage = () => {
                     selectedDate={selectedDate}
                     onSelectDate={setSelectedDate}
                     onNavigateWeek={navigateWeek}
+                    onNavigateDay={navigateDay}
                     onJumpToToday={jumpToToday}
                 />
             ) : (

@@ -13,6 +13,7 @@ interface MobileCookingViewProps {
     selectedDate: Date;
     onSelectDate: (date: Date) => void;
     onNavigateWeek: (direction: 'prev' | 'next') => void;
+    onNavigateDay: (direction: 'prev' | 'next') => void;
     onJumpToToday: () => void;
 }
 
@@ -24,18 +25,20 @@ export const MobileCookingView = ({
     selectedDate,
     onSelectDate,
     onNavigateWeek,
+    onNavigateDay,
     onJumpToToday
 }: MobileCookingViewProps) => {
     const navigate = useNavigate();
     const stripRef = useRef<HTMLDivElement>(null);
     const todayChipRef = useRef<HTMLButtonElement>(null);
 
-    // Auto-scroll to today's chip on mount
+    // Auto-scroll selected day chip into view
     useEffect(() => {
-        if (todayChipRef.current && stripRef.current) {
-            todayChipRef.current.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        const chip = stripRef.current?.querySelector('[data-selected="true"]');
+        if (chip) {
+            chip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         }
-    }, [days]);
+    }, [selectedDate, days]);
 
     const getPlansForSlot = (date: Date, mealType: string, dinerType: string) => {
         const dateStr = format(date, 'yyyy-MM-dd');
@@ -97,7 +100,7 @@ export const MobileCookingView = ({
             {/* Date Strip Navigation */}
             <div className="flex items-center gap-1">
                 <button
-                    onClick={() => onNavigateWeek('prev')}
+                    onClick={() => onNavigateDay('prev')}
                     className="flex-shrink-0 p-2 rounded-lg hover:bg-base-200 active:bg-base-300 text-ink-500 transition-colors"
                 >
                     <ChevronLeft size={20} />
@@ -114,6 +117,7 @@ export const MobileCookingView = ({
                             <button
                                 key={day.toString()}
                                 ref={today ? todayChipRef : undefined}
+                                data-selected={selected ? 'true' : undefined}
                                 onClick={() => onSelectDate(day)}
                                 className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-center transition-all min-w-[52px] ${
                                     selected
@@ -137,7 +141,7 @@ export const MobileCookingView = ({
                 </div>
 
                 <button
-                    onClick={() => onNavigateWeek('next')}
+                    onClick={() => onNavigateDay('next')}
                     className="flex-shrink-0 p-2 rounded-lg hover:bg-base-200 active:bg-base-300 text-ink-500 transition-colors"
                 >
                     <ChevronRight size={20} />
