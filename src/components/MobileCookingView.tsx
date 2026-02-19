@@ -24,7 +24,6 @@ export const MobileCookingView = ({
     activeConfigs,
     selectedDate,
     onSelectDate,
-    onNavigateWeek,
     onNavigateDay,
     onJumpToToday
 }: MobileCookingViewProps) => {
