@@ -25,6 +25,7 @@ export const CookingPage = () => {
     const [anchorDate, setAnchorDate] = useState<Date>(startOfDay(new Date()));
     const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hasLoadedOnce = useRef(false);
 
     const [plannerConfig, setPlannerConfig] = useState<PlannerConfigItem[]>(DEFAULT_PLANNER_CONFIG);
 
@@ -60,6 +61,8 @@ export const CookingPage = () => {
             const newAnchor = direction === 'next'
                 ? newDate
                 : addDays(newDate, -6);
+            // Update days synchronously so the UI never renders with a stale array
+            setDays(Array.from({ length: 7 }, (_, i) => addDays(newAnchor, i)));
             setAnchorDate(newAnchor);
             saveAnchorDebounced(newAnchor);
         }
@@ -79,7 +82,9 @@ export const CookingPage = () => {
     }, [anchorDate]);
 
     const loadData = async (start: Date, end: Date) => {
-        setLoading(true);
+        if (!hasLoadedOnce.current) {
+            setLoading(true);
+        }
         try {
             const startStr = format(start, 'yyyy-MM-dd');
             const endStr = format(end, 'yyyy-MM-dd');
@@ -92,6 +97,7 @@ export const CookingPage = () => {
             console.error(e);
         } finally {
             setLoading(false);
+            hasLoadedOnce.current = true;
         }
     };
 

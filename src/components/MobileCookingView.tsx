@@ -32,11 +32,14 @@ export const MobileCookingView = ({
     const stripRef = useRef<HTMLDivElement>(null);
     const todayChipRef = useRef<HTMLButtonElement>(null);
 
-    // Auto-scroll selected day chip into view
+    // Auto-scroll selected day chip into view using scrollLeft for reliability
     useEffect(() => {
-        const chip = stripRef.current?.querySelector('[data-selected="true"]');
-        if (chip) {
-            chip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        const strip = stripRef.current;
+        const chip = strip?.querySelector('[data-selected="true"]') as HTMLElement | null;
+        if (strip && chip) {
+            const chipCenter = chip.offsetLeft + chip.offsetWidth / 2;
+            const scrollTarget = chipCenter - strip.offsetWidth / 2;
+            strip.scrollTo({ left: scrollTarget, behavior: 'smooth' });
         }
     }, [selectedDate, days]);
 
