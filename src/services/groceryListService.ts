@@ -12,6 +12,7 @@ export interface GroceryListWithRecipe {
         servings: number;
         total_time_mins: number;
         web_source: string | null;
+        category: string | null;
     } | null;
 }
 
@@ -21,6 +22,18 @@ export interface GroceryListsGrouped {
 }
 
 export const groceryListService = {
+    /**
+     * Get all grocery lists (simple id + name for dropdowns)
+     */
+    async getAllLists() {
+        const { data, error } = await supabase
+            .from('grocery_lists')
+            .select('id, name')
+            .order('name');
+        if (error) throw error;
+        return data;
+    },
+
     /**
      * Get all grocery lists grouped by whether they have an associated recipe
      */
@@ -43,7 +56,7 @@ export const groceryListService = {
         // Fetch all non-archived recipes to map which lists have recipes
         const { data: recipes, error: recipesError } = await supabase
             .from('recipes')
-            .select('id, name, servings, total_time_mins, web_source, ingredients_list_id')
+            .select('id, name, servings, total_time_mins, web_source, ingredients_list_id, category')
             .eq('is_archived', false);
 
         if (recipesError) throw recipesError;
@@ -62,20 +75,23 @@ export const groceryListService = {
 
         lists?.forEach(list => {
             const recipe = recipeMap.get(list.id);
-            const itemCount = (list.items as any)?.[0]?.count || 0;
+            const items = list.items as unknown as { count: number }[];
+            const itemCount = items?.[0]?.count || 0;
 
             const groceryList: GroceryListWithRecipe = {
                 id: list.id,
                 name: list.name,
-                created_at: list.created_at,
+                created_at: list.created_at ?? new Date().toISOString(),
                 is_archived: list.is_archived ?? false,
                 itemCount,
+
                 recipe: recipe ? {
                     id: recipe.id,
                     name: recipe.name,
-                    servings: recipe.servings,
-                    total_time_mins: recipe.total_time_mins,
-                    web_source: recipe.web_source
+                    servings: recipe.servings ?? 4,
+                    total_time_mins: recipe.total_time_mins ?? 0,
+                    web_source: recipe.web_source,
+                    category: (recipe as any).category ?? null
                 } : null
             };
 

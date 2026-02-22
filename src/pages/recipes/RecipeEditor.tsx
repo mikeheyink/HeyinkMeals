@@ -41,8 +41,8 @@ export const RecipeEditor = () => {
                     setName(r.name);
                     setServings(r.servings || 4);
                     setInstructions(r.instructions || '');
-                    if (r.ingredients_list?.items) {
-                        setIngredients(r.ingredients_list.items);
+                    if ((r.ingredients_list as any)?.items) {
+                        setIngredients((r.ingredients_list as any).items);
                     }
                 }
             }
@@ -76,7 +76,7 @@ export const RecipeEditor = () => {
         try {
             await recipeService.addIngredientToRecipe(id, selGrocery, qty, unit);
             const r = await recipeService.getRecipe(id);
-            setIngredients(r.ingredients_list.items);
+            setIngredients((r.ingredients_list as any)?.items || []);
         } catch (e) {
             console.error(e);
         }

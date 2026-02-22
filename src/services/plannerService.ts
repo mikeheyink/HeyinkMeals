@@ -24,9 +24,10 @@ export const plannerService = {
         if (error) throw error;
 
         // Filter out recipes whose linked list is archived
-        return data?.filter(recipe =>
-            !recipe.grocery_list || !(recipe.grocery_list as any).is_archived
-        ) || [];
+        return data?.filter(recipe => {
+            const list = recipe.grocery_list as any; // Temporary fix while Supabase generic types are inferred
+            return !list || !list.is_archived;
+        }) || [];
     },
 
     async addPlanEntry(date: string, slot: MealSlot, dinerType: DinerType, type: PlanType, referenceId: string) {
@@ -49,7 +50,7 @@ export const plannerService = {
         if (type === 'Recipe') {
             const recipe = await recipeService.getRecipe(referenceId);
             if (recipe.ingredients_list && recipe.ingredients_list.items) {
-                const itemsToInsert = recipe.ingredients_list.items.map((item: any) => ({
+                const itemsToInsert = recipe.ingredients_list.items.map((item) => ({
                     meal_plan_entry_id: entry.id,
                     recipe_id: referenceId,
                     grocery_type_id: item.grocery_type_id,
@@ -174,8 +175,8 @@ export const plannerService = {
         // 2. Insert into shopping_list_items
         const itemsToInsert = listItems.map(item => ({
             grocery_type_id: item.grocery_type_id,
-            quantity: item.quantity,
-            unit: item.unit,
+            quantity: item.quantity ?? 1,
+            unit: item.unit ?? '',
             is_purchased: false,
             is_in_stock: false,
             meal_plan_entry_id: null, // or could link to a generic "AdHoc" entry if needed

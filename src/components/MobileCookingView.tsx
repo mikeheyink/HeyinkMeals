@@ -110,7 +110,7 @@ export const MobileCookingView = ({
 
                 <div
                     ref={stripRef}
-                    className="flex-1 flex gap-1 overflow-x-auto scrollbar-hide py-1 px-1"
+                    className="flex-1 flex gap-1 overflow-x-auto scrollbar-hide py-1 px-1 snap-x snap-mandatory"
                 >
                     {days.map((day) => {
                         const selected = isSameDay(day, selectedDate);
@@ -121,15 +121,14 @@ export const MobileCookingView = ({
                                 ref={today ? todayChipRef : undefined}
                                 data-selected={selected ? 'true' : undefined}
                                 onClick={() => onSelectDate(day)}
-                                className={`flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-center transition-all min-w-[52px] ${
-                                    selected
+                                className={`snap-center flex-shrink-0 flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-center transition-all min-w-[52px] ${selected
                                         ? today
                                             ? 'bg-accent text-white shadow-md'
                                             : 'bg-ink-900 text-white shadow-md'
                                         : today
                                             ? 'bg-accent/10 text-accent'
                                             : 'bg-base-200 text-ink-500 hover:bg-base-300'
-                                }`}
+                                    }`}
                             >
                                 <span className="text-[10px] font-bold uppercase tracking-wider">
                                     {format(day, 'EEE')}
@@ -204,9 +203,8 @@ export const MobileCookingView = ({
             {/* Meal Cards for Selected Day */}
             {dayPlans.length > 0 ? (
                 <div className="space-y-3">
-                    <h3 className={`text-xs font-black uppercase tracking-widest px-1 ${
-                        viewingToday ? 'text-accent' : 'text-ink-300'
-                    }`}>
+                    <h3 className={`text-xs font-black uppercase tracking-widest px-1 ${viewingToday ? 'text-accent' : 'text-ink-300'
+                        }`}>
                         {viewingToday ? 'Today' : format(selectedDate, 'EEEE')} — {format(selectedDate, 'MMM d')}
                     </h3>
                     <div className="space-y-2">

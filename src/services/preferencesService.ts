@@ -5,7 +5,7 @@ export interface PlannerConfigItem {
     slots: string[];
 }
 
-const DEFAULT_PLANNER_CONFIG: PlannerConfigItem[] = [
+export const DEFAULT_PLANNER_CONFIG: PlannerConfigItem[] = [
     { id: 'Everyone', slots: ['Breakfast', 'Lunch', 'Dinner'] },
     { id: 'Parents', slots: ['Breakfast', 'Lunch', 'Dinner'] },
     { id: 'Children', slots: ['Breakfast', 'Lunch', 'Dinner'] }
@@ -39,7 +39,7 @@ export const preferencesService = {
         const { error } = await supabase
             .from('user_preferences')
             .upsert(
-                { key, value, updated_at: new Date().toISOString() },
+                { key, value: value as any, updated_at: new Date().toISOString() },
                 { onConflict: 'key' }
             );
 

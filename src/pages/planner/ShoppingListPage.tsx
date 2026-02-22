@@ -6,7 +6,9 @@ import { format } from 'date-fns';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { AddItemModal } from '../../components/AddItemModal';
 import { AddFromListModal } from '../../components/AddFromListModal';
-import { List as ListIcon } from 'lucide-react';
+import { List as ListIcon, Store } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { ResponsiveModal } from '../../components/ui/ResponsiveModal';
 
 export const ShoppingListPage = () => {
     const [items, setItems] = useState<any[]>([]);
@@ -15,6 +17,13 @@ export const ShoppingListPage = () => {
     const [orderedExpanded, setOrderedExpanded] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showAddListModal, setShowAddListModal] = useState(false);
+    const [groupByShop, setGroupByShop] = useState(false);
+
+    // Edit Store State
+    const [stores, setStores] = useState<any[]>([]);
+    const [editingItemStore, setEditingItemStore] = useState<any | null>(null);
+    const [selectedStoreId, setSelectedStoreId] = useState<string>('');
+    const [isSavingStore, setIsSavingStore] = useState(false);
 
     const loadList = async () => {
         setLoading(true);
@@ -28,8 +37,18 @@ export const ShoppingListPage = () => {
         }
     };
 
+    const loadStores = async () => {
+        try {
+            const { data } = await supabase.from('stores').select('*').order('name');
+            setStores(data || []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     useEffect(() => {
         loadList();
+        loadStores();
     }, []);
 
     const handleToggle = async (itemId: string, field: 'is_purchased' | 'is_in_stock', current: boolean) => {
@@ -52,28 +71,68 @@ export const ShoppingListPage = () => {
         }
     };
 
+    const handleSaveStore = async () => {
+        if (!editingItemStore) return;
+        setIsSavingStore(true);
+        try {
+            const groceryTypeId = editingItemStore.grocery_types?.id;
+            // Update the default_store_id on the grocery type
+            await supabase
+                .from('grocery_types')
+                .update({ default_store_id: selectedStoreId || null })
+                .eq('id', groceryTypeId);
+
+            // Optimistically update local state so we don't need a full reload immediately
+            setItems(prev => prev.map(item => {
+                if (item.grocery_types?.id === groceryTypeId) {
+                    return {
+                        ...item,
+                        grocery_types: {
+                            ...item.grocery_types,
+                            store: stores.find(s => s.id === selectedStoreId) || null
+                        }
+                    };
+                }
+                return item;
+            }));
+
+            setEditingItemStore(null);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSavingStore(false);
+        }
+    };
+
     const activeItems = items.filter(item => !item.is_purchased && !item.is_in_stock);
     const inStockItems = items.filter(item => item.is_in_stock);
     const orderedItems = items.filter(item => item.is_purchased);
 
+    const getGroupKey = (item: any) => {
+        if (groupByShop) {
+            return item.grocery_types?.store?.name || 'No Preferred Shop';
+        }
+        return item.grocery_types?.category?.name || 'Other';
+    };
+
     const activeGrouped = activeItems.reduce((acc: any, item) => {
-        const cat = item.grocery_types?.category?.name || 'Other';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(item);
+        const key = getGroupKey(item);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
         return acc;
     }, {});
 
     const inStockGrouped = inStockItems.reduce((acc: any, item) => {
-        const cat = item.grocery_types?.category?.name || 'Other';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(item);
+        const key = getGroupKey(item);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
         return acc;
     }, {});
 
     const orderedGrouped = orderedItems.reduce((acc: any, item) => {
-        const cat = item.grocery_types?.category?.name || 'Other';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(item);
+        const key = getGroupKey(item);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
         return acc;
     }, {});
 
@@ -128,6 +187,16 @@ export const ShoppingListPage = () => {
                         >
                             <Home size={18} />
                         </button>
+                        <button
+                            onClick={() => {
+                                setEditingItemStore(item);
+                                setSelectedStoreId(item.grocery_types?.store?.id || '');
+                            }}
+                            className="p-1.5 rounded text-ink-300 hover:text-accent hover:bg-accent/5 transition-all"
+                            title="Edit Preferred Store"
+                        >
+                            <Store size={18} />
+                        </button>
                     </>
                 )}
             </div>
@@ -141,7 +210,16 @@ export const ShoppingListPage = () => {
                     title="Shopping Ledger"
                     subtitle={`${activeItems.length} items on your list`}
                     actions={
-                        <div className="flex flex-wrap md:flex-nowrap gap-2">
+                        <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
+                            <label className="flex items-center gap-2 text-sm font-medium text-ink-700 bg-white border border-base-300 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-base-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={groupByShop}
+                                    onChange={(e) => setGroupByShop(e.target.checked)}
+                                    className="accent-accent w-4 h-4 cursor-pointer"
+                                />
+                                Group by Shop
+                            </label>
                             <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)} icon={Plus} className="flex-1 md:flex-none">
                                 Add
                             </Button>
@@ -168,16 +246,23 @@ export const ShoppingListPage = () => {
                             All items are secured.
                         </div>
                     ) : (
-                        Object.entries(activeGrouped).sort(([a], [b]) => a.localeCompare(b)).map(([category, catItems]: [string, any]) => (
-                            <div key={category} className="space-y-1">
-                                <h2 className="section-title">
-                                    {category}
-                                </h2>
-                                <div className="compact-grid overflow-hidden">
-                                    {catItems.sort((a: any, b: any) => (a.grocery_types?.name || '').localeCompare(b.grocery_types?.name || '')).map((item: any) => renderItem(item))}
+                        Object.entries(activeGrouped)
+                            .sort(([a], [b]) => {
+                                // "No Preferred Shop" should always be first
+                                if (a === 'No Preferred Shop') return -1;
+                                if (b === 'No Preferred Shop') return 1;
+                                return a.localeCompare(b);
+                            })
+                            .map(([groupKey, catItems]: [string, any]) => (
+                                <div key={groupKey} className="space-y-1">
+                                    <h2 className="section-title">
+                                        {groupKey}
+                                    </h2>
+                                    <div className="compact-grid overflow-hidden">
+                                        {catItems.sort((a: any, b: any) => (a.grocery_types?.name || '').localeCompare(b.grocery_types?.name || '')).map((item: any) => renderItem(item))}
+                                    </div>
                                 </div>
-                            </div>
-                        ))
+                            ))
                     )}
                 </section>
 
@@ -259,6 +344,43 @@ export const ShoppingListPage = () => {
                 onClose={() => setShowAddListModal(false)}
                 onItemsAdded={() => { loadList(); }}
             />
+
+            <ResponsiveModal isOpen={!!editingItemStore} onClose={() => setEditingItemStore(null)} className="w-full sm:w-[400px]">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-base-300">
+                    <h2 className="text-lg font-semibold text-ink-900">Preferred Store</h2>
+                    <button
+                        onClick={() => setEditingItemStore(null)}
+                        className="p-2 rounded-full hover:bg-base-200 text-ink-500 transition-colors"
+                    >
+                        <Store size={20} className="opacity-0 absolute" /> {/* Just for spacing if needed or use X */}
+                        <span className="text-xl leading-none">&times;</span>
+                    </button>
+                </div>
+                <div className="p-4 space-y-4">
+                    <p className="text-sm text-ink-600">
+                        Select the preferred store for <strong className="text-ink-900">{editingItemStore?.grocery_types?.name}</strong>.
+                        This will be saved for all future shopping lists.
+                    </p>
+                    <select
+                        value={selectedStoreId}
+                        onChange={(e) => setSelectedStoreId(e.target.value)}
+                        className="zen-input w-full"
+                    >
+                        <option value="">No Preferred Store</option>
+                        {stores.map(store => (
+                            <option key={store.id} value={store.id}>{store.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="p-4 border-t border-base-300 safe-area-bottom flex justify-end gap-3">
+                    <Button variant="ghost" onClick={() => setEditingItemStore(null)} disabled={isSavingStore}>
+                        Cancel
+                    </Button>
+                    <Button variant="primary" onClick={handleSaveStore} disabled={isSavingStore}>
+                        {isSavingStore ? 'Saving...' : 'Save'}
+                    </Button>
+                </div>
+            </ResponsiveModal>
         </>
     );
 };

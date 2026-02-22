@@ -3,7 +3,7 @@ import { X, Plus, Search, Loader2 } from 'lucide-react';
 import { pantryService } from '../services/pantryService';
 import { plannerService } from '../services/plannerService';
 import { Button } from './ui/Button';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import { ResponsiveModal } from './ui/ResponsiveModal';
 
 interface AddItemModalProps {
     isOpen: boolean;
@@ -14,7 +14,7 @@ interface AddItemModalProps {
 interface GroceryType {
     id: string;
     name: string;
-    category_id: string;
+    category_id: string | null;
     grocery_categories?: { name: string } | null;
 }
 
@@ -31,9 +31,6 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const inputRef = useRef<HTMLInputElement>(null);
     const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-    const modalRef = useRef<HTMLDivElement>(null);
-
-    useFocusTrap({ isOpen, onClose, containerRef: modalRef });
 
     useEffect(() => {
         if (isOpen) {
@@ -57,7 +54,6 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
             ]);
             setGroceries(groceryData || []);
             setCategories(categoryData || []);
-            // Default to first category if available
             if (categoryData && categoryData.length > 0) {
                 setNewItemCategory(categoryData[0].id);
             }
@@ -72,19 +68,16 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
         g.name.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Limit to 50 items for display
     const displayedGroceries = filteredGroceries.slice(0, 50);
 
     const exactMatch = groceries.some(g =>
         g.name.toLowerCase() === search.toLowerCase()
     );
 
-    // Reset highlighted index when search changes
     useEffect(() => {
         setHighlightedIndex(search.trim() ? 0 : -1);
     }, [search]);
 
-    // Scroll highlighted item into view
     useEffect(() => {
         if (highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
             itemRefs.current[highlightedIndex]?.scrollIntoView({
@@ -134,10 +127,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
         setAdding(true);
         setError(null);
         try {
-            // Create the grocery type first with selected category
             const newGrocery = await pantryService.addGrocery(search.trim(), newItemCategory);
-
-            // Then add to shopping list
             await plannerService.addManualItem(newGrocery.id, quantity, unit);
             onItemAdded();
         } catch (e) {
@@ -148,20 +138,11 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
         }
     };
 
-    if (!isOpen) return null;
-
     return (
-        <div ref={modalRef} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onKeyDown={handleKeyDown}>
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                onClick={onClose}
-            />
-
-            {/* Modal */}
-            <div className="relative bg-white w-full sm:w-[400px] sm:max-h-[80vh] max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
+        <ResponsiveModal isOpen={isOpen} onClose={onClose} className="w-full sm:w-[400px] sm:max-h-[80vh] max-h-[90vh]">
+            <div onKeyDown={handleKeyDown} className="flex flex-col h-full overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-base-300">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-base-300 shrink-0">
                     <h2 className="text-lg font-semibold text-ink-900">Add to Shopping List</h2>
                     <button
                         onClick={onClose}
@@ -173,13 +154,13 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
 
                 {/* Error Banner */}
                 {error && (
-                    <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    <div className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 shrink-0">
                         {error}
                     </div>
                 )}
 
                 {/* Search Input */}
-                <div className="p-4 border-b border-base-300">
+                <div className="p-4 border-b border-base-300 shrink-0">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" size={18} />
                         <input
@@ -304,12 +285,12 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-base-300 safe-area-bottom">
+                <div className="p-4 border-t border-base-300 shrink-0 safe-area-bottom">
                     <Button variant="outline" onClick={onClose} className="w-full">
                         Cancel
                     </Button>
                 </div>
             </div>
-        </div>
+        </ResponsiveModal>
     );
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { pantryService } from '../../services/pantryService';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -6,6 +6,9 @@ import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { AddCategoryModal } from '../../components/AddCategoryModal';
 import { Plus, Loader2, Edit2, Trash2, X, Check, Search } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { SwipeToDelete } from '../../components/ui/SwipeToDelete';
+import { toast } from 'sonner';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export const PantryPage = () => {
     const [groceries, setGroceries] = useState<any[]>([]);
@@ -21,11 +24,29 @@ export const PantryPage = () => {
     // Edit State
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
-
     const [editCat, setEditCat] = useState('');
 
     const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
     const [categoryModalContext, setCategoryModalContext] = useState<'add' | 'edit'>('add');
+
+    // Optimistic Delete State
+    const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+    const deletionTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+    // Collapsible Category State
+    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+    const toggleCategory = (categoryId: string) => {
+        setExpandedCategories(prev => {
+            const next = new Set(prev);
+            if (next.has(categoryId)) {
+                next.delete(categoryId);
+            } else {
+                next.add(categoryId);
+            }
+            return next;
+        });
+    };
 
     const loadData = async () => {
         try {
@@ -45,6 +66,9 @@ export const PantryPage = () => {
 
     useEffect(() => {
         loadData();
+        return () => {
+            Object.values(deletionTimeouts.current).forEach(clearTimeout);
+        };
     }, []);
 
     const handleAdd = async (e: React.FormEvent) => {
@@ -90,22 +114,132 @@ export const PantryPage = () => {
         }
     };
 
-    const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
-        setLoading(true);
-        try {
-            await pantryService.deleteGrocery(id);
-            await loadData();
-        } catch (e: any) {
-            console.error(e);
-            alert(`Could not delete "${name}". This item might be used in a recipe or shopping list.\n\nError: ${e.message}`);
-        } finally {
-            setLoading(false);
-        }
+    const requestDelete = (item: { id: string, name: string }) => {
+        // Optimistically hide from UI
+        setDeletedIds(prev => {
+            const next = new Set(prev);
+            next.add(item.id);
+            return next;
+        });
+
+        // Show undo toast
+        toast.success(`Deleted ${item.name}`, {
+            duration: 5000,
+            action: {
+                label: 'Undo',
+                onClick: () => {
+                    // Cancel physical deletion
+                    if (deletionTimeouts.current[item.id]) {
+                        clearTimeout(deletionTimeouts.current[item.id]);
+                        delete deletionTimeouts.current[item.id];
+                    }
+                    // Restore to UI
+                    setDeletedIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(item.id);
+                        return next;
+                    });
+                }
+            }
+        });
+
+        // Set timeout to actually send delete request to server
+        deletionTimeouts.current[item.id] = setTimeout(async () => {
+            try {
+                await pantryService.deleteGrocery(item.id);
+                setGroceries(prev => prev.filter(g => g.id !== item.id));
+            } catch (e: any) {
+                console.error(e);
+                toast.error(`Could not delete "${item.name}". It might be used in a recipe.`);
+                // Put it back
+                setDeletedIds(prev => {
+                    const next = new Set(prev);
+                    next.delete(item.id);
+                    return next;
+                });
+            } finally {
+                delete deletionTimeouts.current[item.id];
+            }
+        }, 5000);
     };
 
     const filteredGroceries = groceries.filter(g =>
-        g.name.toLowerCase().includes(searchQuery.toLowerCase())
+        g.name.toLowerCase().includes(searchQuery.toLowerCase()) && !deletedIds.has(g.id)
+    );
+
+    // Grouping groceries by category ID (and fallback to 'Uncategorized')
+    const groupedGroceries = filteredGroceries.reduce((acc: any, item: any) => {
+        const catId = item.category_id || 'uncategorized';
+        if (!acc[catId]) acc[catId] = [];
+        acc[catId].push(item);
+        return acc;
+    }, {});
+
+    const renderDesktopEditRow = (item: any) => (
+        <tr key={item.id} className="zen-table-row group bg-base-50">
+            <td className="zen-table-cell pl-8">
+                <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="zen-input w-full"
+                    autoFocus
+                />
+            </td>
+            <td className="zen-table-cell">
+                <SearchableSelect
+                    options={categories}
+                    value={editCat}
+                    onChange={(val) => setEditCat(val)}
+                    getOptionValue={(c) => c.id}
+                    getOptionLabel={(c) => c.name}
+                    placeholder="Select category..."
+                    searchPlaceholder="Search categories..."
+                    onAddNew={() => {
+                        setCategoryModalContext('edit');
+                        setIsAddCategoryModalOpen(true);
+                    }}
+                    addNewLabel="Create new category..."
+                />
+            </td>
+            <td className="zen-table-cell">
+                <div className="flex justify-end gap-1">
+                    <Button size="sm" variant="ghost" onClick={handleCancelEdit} icon={X}>Cancel</Button>
+                    <Button size="sm" onClick={() => handleUpdate(item.id)} icon={Check}>Save</Button>
+                </div>
+            </td>
+        </tr>
+    );
+
+    const renderDesktopRow = (item: any) => (
+        <tr key={item.id} className="zen-table-row group hover:bg-base-50 transition-colors">
+            <td className="zen-table-cell font-medium text-ink-900 pl-8">
+                {item.name}
+            </td>
+            <td className="zen-table-cell">
+                <span className="zen-badge">
+                    {item.grocery_categories?.name || 'Uncategorized'}
+                </span>
+            </td>
+            <td className="zen-table-cell">
+                <div className="zen-table-actions">
+                    <button
+                        onClick={() => handleStartEdit(item)}
+                        className="p-1.5 text-ink-300 hover:text-ink-700 transition-colors"
+                        title="Edit"
+                    >
+                        <Edit2 size={14} />
+                    </button>
+                    <button
+                        onClick={() => requestDelete(item)}
+                        className="p-1.5 text-ink-300 hover:text-red-500 transition-colors"
+                        title="Delete"
+                    >
+                        <Trash2 size={14} />
+                    </button>
+                </div>
+            </td>
+        </tr>
     );
 
     return (
@@ -188,147 +322,126 @@ export const PantryPage = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredGroceries.map((item) => (
-                                    <tr key={item.id} className="zen-table-row group">
-                                        {editingId === item.id ? (
-                                            <>
-                                                <td className="zen-table-cell">
-                                                    <input
-                                                        type="text"
-                                                        value={editName}
-                                                        onChange={(e) => setEditName(e.target.value)}
-                                                        className="zen-input w-full"
-                                                        autoFocus
-                                                    />
-                                                </td>
-                                                <td className="zen-table-cell">
-                                                    <SearchableSelect
-                                                        options={categories}
-                                                        value={editCat}
-                                                        onChange={(val) => setEditCat(val)}
-                                                        getOptionValue={(c) => c.id}
-                                                        getOptionLabel={(c) => c.name}
-                                                        placeholder="Select category..."
-                                                        searchPlaceholder="Search categories..."
-                                                        onAddNew={() => {
-                                                            setCategoryModalContext('edit');
-                                                            setIsAddCategoryModalOpen(true);
-                                                        }}
-                                                        addNewLabel="Create new category..."
-                                                    />
-                                                </td>
-                                                <td className="zen-table-cell">
-                                                    <div className="flex justify-end gap-1">
-                                                        <Button size="sm" variant="ghost" onClick={handleCancelEdit} icon={X}>Cancel</Button>
-                                                        <Button size="sm" onClick={() => handleUpdate(item.id)} icon={Check}>Save</Button>
+                                {categories.concat([{ id: 'uncategorized', name: 'Uncategorized' }]).map((cat: any) => {
+                                    const items = groupedGroceries[cat.id];
+                                    if (!items || items.length === 0) return null;
+                                    const isExpanded = expandedCategories.has(cat.id);
+
+                                    return (
+                                        <React.Fragment key={cat.id}>
+                                            <tr
+                                                className="bg-base-100 hover:bg-base-200 cursor-pointer transition-colors"
+                                                onClick={() => toggleCategory(cat.id)}
+                                            >
+                                                <td colSpan={3} className="px-4 py-3 border-b border-base-200">
+                                                    <div className="flex items-center gap-2 text-ink-900 font-semibold selection:bg-transparent">
+                                                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                                        {cat.name}
+                                                        <span className="text-ink-400 text-sm font-normal ml-2">({items.length})</span>
                                                     </div>
                                                 </td>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <td className="zen-table-cell font-medium text-ink-900">
-                                                    {item.name}
-                                                </td>
-                                                <td className="zen-table-cell">
-                                                    <span className="zen-badge">
-                                                        {item.grocery_categories?.name}
-                                                    </span>
-                                                </td>
-                                                <td className="zen-table-cell">
-                                                    <div className="zen-table-actions">
-                                                        <button
-                                                            onClick={() => handleStartEdit(item)}
-                                                            className="p-1.5 text-ink-300 hover:text-ink-700 transition-colors"
-                                                            title="Edit"
-                                                        >
-                                                            <Edit2 size={14} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDelete(item.id, item.name)}
-                                                            className="p-1.5 text-ink-300 hover:text-red-500 transition-colors"
-                                                            title="Delete"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </>
-                                        )}
-                                    </tr>
-                                ))}
+                                            </tr>
+                                            {isExpanded && items.map((item: any) => (
+                                                editingId === item.id ? renderDesktopEditRow(item) : renderDesktopRow(item)
+                                            ))}
+                                        </React.Fragment>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
 
                     {/* Mobile Card View */}
-                    <div className="md:hidden space-y-3">
-                        {filteredGroceries.map((item) => (
-                            <div
-                                key={item.id}
-                                className="p-4 bg-white border border-base-300 rounded-xl shadow-sm space-y-3"
-                            >
-                                {editingId === item.id ? (
-                                    <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-tight text-ink-300">Name</label>
-                                            <input
-                                                type="text"
-                                                value={editName}
-                                                onChange={(e) => setEditName(e.target.value)}
-                                                className="zen-input w-full"
-                                                autoFocus
-                                            />
+                    <div className="md:hidden space-y-4">
+                        {categories.concat([{ id: 'uncategorized', name: 'Uncategorized' }]).map((cat: any) => {
+                            const items = groupedGroceries[cat.id];
+                            if (!items || items.length === 0) return null;
+                            const isExpanded = expandedCategories.has(cat.id);
+
+                            return (
+                                <div key={cat.id} className="space-y-2">
+                                    <button
+                                        className="w-full flex items-center gap-2 p-3 bg-base-100 rounded-xl font-bold text-ink-900 shadow-sm border border-base-200 active:scale-[0.98] transition-all"
+                                        onClick={() => toggleCategory(cat.id)}
+                                    >
+                                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                        {cat.name}
+                                        <span className="text-ink-400 font-medium ml-auto text-sm">{items.length}</span>
+                                    </button>
+
+                                    {isExpanded && (
+                                        <div className="space-y-3 pl-2 border-l-2 border-base-200 ml-2">
+                                            {items.map((item: any) => (
+                                                <SwipeToDelete key={item.id} onDelete={() => requestDelete(item)}>
+                                                    <div className="p-4 bg-white border border-base-300 rounded-xl shadow-sm space-y-3 pointer-events-none sm:pointer-events-auto">
+                                                        {editingId === item.id ? (
+                                                            <div className="space-y-4 pointer-events-auto">
+                                                                <div className="space-y-2">
+                                                                    <label className="text-[10px] font-black uppercase tracking-tight text-ink-300">Name</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={editName}
+                                                                        onChange={(e) => setEditName(e.target.value)}
+                                                                        className="zen-input w-full"
+                                                                        autoFocus
+                                                                    />
+                                                                </div>
+                                                                <div className="space-y-2">
+                                                                    <label className="text-[10px] font-black uppercase tracking-tight text-ink-300">Category</label>
+                                                                    <SearchableSelect
+                                                                        options={categories}
+                                                                        value={editCat}
+                                                                        onChange={(val) => setEditCat(val)}
+                                                                        getOptionValue={(c) => c.id}
+                                                                        getOptionLabel={(c) => c.name}
+                                                                        placeholder="Select category..."
+                                                                        searchPlaceholder="Search categories..."
+                                                                        onAddNew={() => {
+                                                                            setCategoryModalContext('edit');
+                                                                            setIsAddCategoryModalOpen(true);
+                                                                        }}
+                                                                        addNewLabel="Create new category..."
+                                                                    />
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <Button size="sm" variant="secondary" className="flex-1" onClick={handleCancelEdit}>Cancel</Button>
+                                                                    <Button size="sm" className="flex-1" onClick={() => handleUpdate(item.id)}>Save</Button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex justify-between items-start pointer-events-auto">
+                                                                <div className="space-y-1">
+                                                                    <h3 className="font-bold text-ink-900 text-base leading-tight">
+                                                                        {item.name}
+                                                                    </h3>
+                                                                    <span className="zen-badge">
+                                                                        {item.grocery_categories?.name}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1">
+                                                                    <button
+                                                                        onClick={() => handleStartEdit(item)}
+                                                                        className="p-2 text-ink-300 active:text-accent active:bg-accent/5 rounded-lg transition-colors border border-base-300"
+                                                                    >
+                                                                        <Edit2 size={16} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => requestDelete(item)}
+                                                                        className="p-2 text-ink-300 active:text-red-500 active:bg-red-50 rounded-lg transition-colors border border-base-300 hidden sm:block"
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </SwipeToDelete>
+                                            ))}
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black uppercase tracking-tight text-ink-300">Category</label>
-                                            <SearchableSelect
-                                                options={categories}
-                                                value={editCat}
-                                                onChange={(val) => setEditCat(val)}
-                                                getOptionValue={(c) => c.id}
-                                                getOptionLabel={(c) => c.name}
-                                                placeholder="Select category..."
-                                                searchPlaceholder="Search categories..."
-                                                onAddNew={() => {
-                                                    setCategoryModalContext('edit');
-                                                    setIsAddCategoryModalOpen(true);
-                                                }}
-                                                addNewLabel="Create new category..."
-                                            />
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <Button size="sm" variant="secondary" className="flex-1" onClick={handleCancelEdit}>Cancel</Button>
-                                            <Button size="sm" className="flex-1" onClick={() => handleUpdate(item.id)}>Save</Button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex justify-between items-start">
-                                        <div className="space-y-1">
-                                            <h3 className="font-bold text-ink-900 text-base leading-tight">
-                                                {item.name}
-                                            </h3>
-                                            <span className="zen-badge">
-                                                {item.grocery_categories?.name}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={() => handleStartEdit(item)}
-                                                className="p-2 text-ink-300 active:text-accent active:bg-accent/5 rounded-lg transition-colors border border-base-300"
-                                            >
-                                                <Edit2 size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(item.id, item.name)}
-                                                className="p-2 text-ink-300 active:text-red-500 active:bg-red-50 rounded-lg transition-colors border border-base-300"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}

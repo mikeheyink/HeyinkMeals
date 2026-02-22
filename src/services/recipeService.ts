@@ -1,58 +1,6 @@
 import { supabase } from '../lib/supabase';
+import { groceryListService } from './groceryListService';
 
-
-export const listService = {
-
-    async createList(name: string) {
-        const { data, error } = await supabase
-            .from('grocery_lists')
-            .insert({ name })
-            .select()
-            .single();
-        if (error) throw error;
-        return data;
-    },
-
-    async getAllLists() {
-        const { data, error } = await supabase
-            .from('grocery_lists')
-            .select('id, name')
-            .order('name');
-        if (error) throw error;
-        return data;
-    },
-
-    async addListItem(listId: string, groceryTypeId: string, quantity: number, unit: string) {
-        const { data, error } = await supabase
-            .from('grocery_list_items')
-            .insert({
-                list_id: listId,
-                grocery_type_id: groceryTypeId,
-                quantity,
-                unit
-            })
-            .select()
-            .single();
-        if (error) throw error;
-        return data;
-    },
-
-    async getListDetails(listId: string) {
-        const { data, error } = await supabase
-            .from('grocery_lists')
-            .select(`
-        *,
-        items: grocery_list_items (
-          *,
-          grocery_type: grocery_types (name)
-        )
-      `)
-            .eq('id', listId)
-            .single();
-        if (error) throw error;
-        return data;
-    }
-};
 
 export const recipeService = {
 
@@ -73,7 +21,8 @@ export const recipeService = {
                 name,
                 instructions,
                 servings,
-                ingredients_list_id: listData.id
+                ingredients_list_id: listData.id,
+                category: 'other' // Default category
             })
             .select()
             .single();
@@ -94,7 +43,16 @@ export const recipeService = {
         if (!recipe.ingredients_list_id) throw new Error('Recipe has no ingredients list linked');
 
         // 2. Add item to that list
-        return listService.addListItem(recipe.ingredients_list_id, groceryTypeId, quantity, unit);
+        return groceryListService.addItem(recipe.ingredients_list_id, groceryTypeId, quantity, unit);
+    },
+
+    async updateRecipeCategory(recipeId: string, category: string) {
+        const { error } = await supabase
+            .from('recipes')
+            .update({ category })
+            .eq('id', recipeId);
+
+        if (error) throw error;
     },
 
     async getRecipe(recipeId: string) {
@@ -117,3 +75,4 @@ export const recipeService = {
         return data;
     }
 };
+

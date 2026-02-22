@@ -1,133 +1,77 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { plannerService } from '../../services/plannerService';
-import { preferencesService } from '../../services/preferencesService';
-import type { PlannerConfigItem } from '../../services/preferencesService';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { SearchableSelect } from '../../components/ui/SearchableSelect';
-import { Plus, X, ChevronUp, ChevronDown, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
 import { format, addDays, startOfDay, parseISO, isToday } from 'date-fns';
-import { PageHeader } from '../../components/ui/PageHeader';
-import { MobilePlannerView } from '../../components/MobilePlannerView';
-import { useIsMobile } from '../../hooks/useMediaQuery';
-import { AddRecipeModal } from '../../components/AddRecipeModal';
+import { ChevronUp, ChevronDown, Settings, ChevronLeft, ChevronRight, X, Plus } from 'lucide-react';
 
-const DEFAULT_PLANNER_CONFIG: PlannerConfigItem[] = [
-    { id: 'Everyone', slots: ['Breakfast', 'Lunch', 'Dinner'] },
-    { id: 'Parents', slots: ['Breakfast', 'Lunch', 'Dinner'] },
-    { id: 'Children', slots: ['Breakfast', 'Lunch', 'Dinner'] }
-];
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Button } from '../../components/ui/Button';
+import { MobilePlannerView } from '../../components/MobilePlannerView';
+import { AddRecipeModal } from '../../components/AddRecipeModal';
+import { PlannerGrid } from '../../components/planner/PlannerGrid';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { useIsMobile } from '../../hooks/useMediaQuery';
+
+import {
+    usePlannerConfig,
+    usePlannerAnchor,
+    usePlannerPlans,
+    usePlannerRecipes,
+    useMutatePlannerConfig,
+    useMutatePlannerAnchor,
+    useAddMealPlan,
+    useDeleteMealPlan
+} from '../../hooks/queries/usePlannerData';
+import { DEFAULT_PLANNER_CONFIG } from '../../services/preferencesService';
 
 export const PlannerPage = () => {
-    const [days, setDays] = useState<Date[]>([]);
-    const [plans, setPlans] = useState<any[]>([]);
-    const [recipes, setRecipes] = useState<any[]>([]);
-
-    const [addingTo, setAddingTo] = useState<{ date: Date, meal: string } | null>(null);
-    const [selectedRecipe, setSelectedRecipe] = useState('');
-
+    const isMobile = useIsMobile();
     const allSlots = ['Breakfast', 'Lunch', 'Dinner'] as const;
 
-    // Customization Settings - load from database
-    const [plannerConfig, setPlannerConfig] = useState<PlannerConfigItem[]>(DEFAULT_PLANNER_CONFIG);
+    // Local UI State
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false);
-    const [pendingDesktopSlot, setPendingDesktopSlot] = useState<{ date: Date; meal: string } | null>(null);
+    const [selectedSlotForDrawer, setSelectedSlotForDrawer] = useState<{ date: Date; meal: string } | null>(null);
+    const [drawerSelectedRecipe, setDrawerSelectedRecipe] = useState('');
 
-    // Viewport anchor state - the date from which the 11-day window starts
-    const [anchorDate, setAnchorDate] = useState<Date>(startOfDay(new Date()));
-    const [isLoadingAnchor, setIsLoadingAnchor] = useState(true);
-    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // React Query Data
+    const { data: plannerConfig = DEFAULT_PLANNER_CONFIG } = usePlannerConfig();
+    const { data: anchorDateStr } = usePlannerAnchor();
+    const anchorDate = anchorDateStr ? parseISO(anchorDateStr) : startOfDay(new Date());
 
-    // Check if current view contains today
+    // Derived Date State
+    const days = Array.from({ length: 11 }, (_, i) => addDays(anchorDate, i));
     const viewContainsToday = days.some(d => isToday(d));
 
-    // Load preferences from database on mount
-    useEffect(() => {
-        Promise.all([
-            preferencesService.getPlannerConfig(),
-            preferencesService.getPlannerViewportAnchor()
-        ]).then(([config, anchor]) => {
-            setPlannerConfig(config);
-            if (anchor) {
-                setAnchorDate(parseISO(anchor));
-            }
-            setIsLoadingAnchor(false);
-        });
-    }, []);
+    const { data: plansData } = usePlannerPlans(days[0], days[10]);
+    const plans = plansData || [];
 
-    // Save preferences to database when they change
-    const updatePlannerConfig = (newConfig: PlannerConfigItem[]) => {
-        setPlannerConfig(newConfig);
-        preferencesService.setPlannerConfig(newConfig);
-    };
+    const { data: recipesData } = usePlannerRecipes();
+    const recipes = recipesData || [];
 
-    // Debounced save of anchor date
-    const saveAnchorDebounced = useCallback((date: Date) => {
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
-        saveTimeoutRef.current = setTimeout(() => {
-            preferencesService.setPlannerViewportAnchor(format(date, 'yyyy-MM-dd'));
-        }, 500);
-    }, []);
-
-    // Generate days from anchor date
-    useEffect(() => {
-        if (isLoadingAnchor) return;
-        const week = Array.from({ length: 11 }, (_, i) => addDays(anchorDate, i));
-        setDays(week);
-        loadData(week[0], week[10]);
-
-    }, [anchorDate, isLoadingAnchor]);
+    // React Query Mutations
+    const { mutate: updateConfig } = useMutatePlannerConfig();
+    const { mutate: updateAnchor } = useMutatePlannerAnchor();
+    const { mutateAsync: addMealPlan } = useAddMealPlan();
+    const { mutateAsync: deleteMealPlan } = useDeleteMealPlan();
 
     // Navigation handlers
     const navigateWeek = (direction: 'prev' | 'next') => {
         const offset = direction === 'prev' ? -7 : 7;
         const newAnchor = startOfDay(addDays(anchorDate, offset));
-        setAnchorDate(newAnchor);
-        saveAnchorDebounced(newAnchor);
+        updateAnchor(format(newAnchor, 'yyyy-MM-dd'));
     };
 
     const jumpToToday = () => {
         const today = startOfDay(new Date());
-        setAnchorDate(today);
-        saveAnchorDebounced(today);
+        updateAnchor(format(today, 'yyyy-MM-dd'));
     };
 
-    const refreshRecipes = async () => {
-        const recipeData = await plannerService.getRecipesWithListNames();
-        if (recipeData) {
-            setRecipes(recipeData);
-        }
-    };
-
-    const loadData = async (start: Date, end: Date) => {
-        try {
-            const startStr = format(start, 'yyyy-MM-dd');
-            const endStr = format(end, 'yyyy-MM-dd');
-            const p = await plannerService.getPlanForRange(startStr, endStr);
-            setPlans(p || []);
-
-            await refreshRecipes();
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-
-
-    const getPlansForSlot = (date: Date, mealType: string, dinerType: string) => {
-        const dateStr = format(date, 'yyyy-MM-dd');
-        return plans.filter(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
-    };
-
+    // Config handlers
     const moveItem = (index: number, direction: 'up' | 'down') => {
         const newConfig = [...plannerConfig];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex >= 0 && targetIndex < newConfig.length) {
             [newConfig[index], newConfig[targetIndex]] = [newConfig[targetIndex], newConfig[index]];
-            updatePlannerConfig(newConfig);
+            updateConfig(newConfig);
         }
     };
 
@@ -141,20 +85,22 @@ export const PlannerPage = () => {
                 );
             return { ...item, slots: newSlots };
         });
-        updatePlannerConfig(newConfig);
+        updateConfig(newConfig);
     };
 
     const activeConfigs = plannerConfig.filter(c => c.slots.length > 0);
-    const totalActiveSlots = activeConfigs.reduce((sum, c) => sum + c.slots.length, 0);
-    const isMobile = useIsMobile();
 
-    // Handler functions for mobile view
+    // Plan mutations handlers
     const handleAddMeal = async (date: Date, slot: string, dinerId: string, recipeId: string) => {
         const dateStr = format(date, 'yyyy-MM-dd');
         try {
-            // Allow multiple recipes per slot - no longer delete existing
-            await plannerService.addPlanEntry(dateStr, slot as any, dinerId as any, 'Recipe', recipeId);
-            await loadData(days[0], days[10]);
+            await addMealPlan({
+                date: dateStr,
+                slot: slot as any,
+                dinerType: dinerId as any,
+                planType: 'Recipe',
+                referenceId: recipeId
+            });
         } catch (err) {
             console.error('Failed to add meal:', err);
         }
@@ -162,26 +108,21 @@ export const PlannerPage = () => {
 
     const handleDeleteMeal = async (planId: string) => {
         try {
-            await plannerService.deletePlanEntry(planId);
-            await loadData(days[0], days[10]);
+            await deleteMealPlan(planId);
         } catch (err) {
             console.error('Failed to delete meal:', err);
         }
     };
 
     const handleRecipeCreated = async (recipeId: string) => {
-        await refreshRecipes();
-
-        if (pendingDesktopSlot) {
-            const [dinerId, slot] = pendingDesktopSlot.meal.split('-');
+        if (selectedSlotForDrawer) {
+            const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
             if (dinerId && slot) {
-                await handleAddMeal(pendingDesktopSlot.date, slot, dinerId, recipeId);
+                await handleAddMeal(selectedSlotForDrawer.date, slot, dinerId, recipeId);
             }
-            setPendingDesktopSlot(null);
-            setAddingTo(null);
-            setSelectedRecipe('');
+            setSelectedSlotForDrawer(null);
+            setDrawerSelectedRecipe('');
         }
-
         setIsAddRecipeModalOpen(false);
     };
 
@@ -349,7 +290,6 @@ export const PlannerPage = () => {
                 }
             />
 
-            {/* Mobile View */}
             {isMobile ? (
                 <MobilePlannerView
                     days={days}
@@ -362,213 +302,104 @@ export const PlannerPage = () => {
                     onRequestNextWeek={() => navigateWeek('next')}
                     onJumpToToday={jumpToToday}
                     viewContainsToday={viewContainsToday}
-                    onRefreshRecipes={refreshRecipes}
+                    onRefreshRecipes={async () => { }}
                 />
             ) : (
-                /* Desktop View */
-                <Card className="p-0 border-none shadow-none bg-transparent overflow-hidden">
-                    <div className="overflow-x-auto pb-4">
-                        <div className="min-w-[1000px] compact-grid !gap-0 !bg-transparent border-none">
-                            {/* Row 1: Diner Type Header */}
-                            <div
-                                className="grid sticky top-0 z-40 bg-base-100 text-[10px] font-black uppercase tracking-widest text-ink-300 border-b border-base-300 shadow-sm"
-                                style={{ gridTemplateColumns: `120px repeat(${totalActiveSlots}, 1fr)` }}
-                            >
-                                <div className="p-2 border-r border-base-300 bg-base-200 sticky left-0 z-50"></div>
-                                {activeConfigs.map((config) => (
-                                    <div
-                                        key={config.id}
-                                        className="p-2 text-center border-r border-base-300 last:border-r-0 bg-base-100"
-                                        style={{ gridColumn: `span ${config.slots.length}` }}
-                                    >
-                                        {config.id}
-                                    </div>
-                                ))}
+                <PlannerGrid
+                    days={days}
+                    plans={plans}
+                    recipes={recipes}
+                    activeConfigs={activeConfigs}
+                    onSelectSlot={(date, meal) => setSelectedSlotForDrawer({ date, meal })}
+                    onDeleteMeal={handleDeleteMeal}
+                />
+            )}
+
+            {/* Desktop Slide-over Drawer for Adding Meals */}
+            {selectedSlotForDrawer && !isMobile && (
+                <>
+                    {/* Backdrop */}
+                    <div
+                        className="fixed inset-0 bg-black/10 backdrop-blur-[2px] z-[60] animate-in fade-in duration-200"
+                        onClick={() => setSelectedSlotForDrawer(null)}
+                    />
+
+                    {/* Drawer Panel */}
+                    <div className="fixed right-0 top-0 bottom-0 w-[400px] bg-white shadow-2xl z-[70] flex flex-col animate-in slide-in-from-right duration-300 border-l border-base-200">
+                        {/* Drawer Header */}
+                        <div className="flex items-center justify-between p-6 border-b border-base-200 bg-base-50/50">
+                            <div>
+                                <h3 className="text-lg font-bold text-ink-900">Plan a Meal</h3>
+                                <p className="text-sm font-medium text-ink-500 mt-1">
+                                    {format(selectedSlotForDrawer.date, 'EEEE, MMM d')} • <span className="text-accent">{selectedSlotForDrawer.meal.replace('-', ' ')}</span>
+                                </p>
                             </div>
-
-                            {/* Row 2: Slot Header */}
-                            <div
-                                className="grid sticky top-[33px] z-30 bg-base-100 text-[10px] font-black uppercase tracking-widest text-ink-500 border-b border-base-300 shadow-sm"
-                                style={{ gridTemplateColumns: `120px repeat(${totalActiveSlots}, 1fr)` }}
+                            <button
+                                onClick={() => setSelectedSlotForDrawer(null)}
+                                className="p-2 bg-white hover:bg-base-200 text-ink-500 hover:text-ink-900 rounded-xl transition-all shadow-sm border border-base-200"
                             >
-                                <div className="p-3 border-r border-base-300 sticky left-0 z-40 bg-base-100">Date</div>
-                                {activeConfigs.map((config, cIdx) =>
-                                    config.slots.map((slot, sIdx) => (
-                                        <div
-                                            key={`${config.id}-${slot}`}
-                                            className={`p-3 text-center border-r border-base-300 bg-base-100 ${(cIdx === activeConfigs.length - 1 && sIdx === config.slots.length - 1) ? 'border-r-0' : ''
-                                                }`}
-                                        >
-                                            {slot}
-                                        </div>
-                                    ))
-                                )}
-                            </div>
+                                <X size={20} />
+                            </button>
+                        </div>
 
-                            {/* Day Rows */}
-                            {days.map((day) => (
-                                <div
-                                    key={day.toString()}
-                                    className="grid border-t border-base-300"
-                                    style={{ gridTemplateColumns: `120px repeat(${totalActiveSlots}, 1fr)` }}
-                                >
-                                    {/* Date Cell */}
-                                    <div className="p-4 bg-base-200 border-r border-base-300 flex flex-col justify-center sticky-left min-h-[100px]">
-                                        <span className="text-xs font-bold text-ink-900">{format(day, 'EEEE')}</span>
-                                        <span className="text-[10px] text-ink-500">{format(day, 'MMM d')}</span>
-                                    </div>
-
-                                    {/* Meal Cells */}
-                                    {activeConfigs.map((config) =>
-                                        config.slots.map((meal) => {
-                                            const slotPlans = getPlansForSlot(day, meal, config.id);
-                                            const isEditing = addingTo?.date === day && addingTo?.meal === `${config.id}-${meal}`;
-                                            const hasPlans = slotPlans.length > 0;
-
-                                            // Get recipe names for display
-                                            const recipesInSlot = slotPlans.map(plan => {
-                                                const recipeData = recipes.find(r => r.id === plan.reference_id);
-                                                return {
-                                                    planId: plan.id,
-                                                    name: recipeData?.grocery_list?.name || recipeData?.name || 'Unknown'
-                                                };
-                                            });
-
-                                            return (
-                                                <div key={`${config.id}-${meal}`} className={`p-3 bg-white min-h-[100px] group border-r border-base-300 last:border-r-0`}>
-                                                    {isEditing ? (
-                                                        <div className="flex flex-col gap-1 h-full">
-                                                            <SearchableSelect
-                                                                options={recipes}
-                                                                value={selectedRecipe}
-                                                                onChange={async (newVal) => {
-                                                                    if (!newVal) {
-                                                                        setAddingTo(null);
-                                                                        setSelectedRecipe('');
-                                                                        return;
-                                                                    }
-
-                                                                    setSelectedRecipe(newVal);
-                                                                    const dateStr = format(day, 'yyyy-MM-dd');
-
-                                                                    try {
-                                                                        // Add new recipe (multi-recipe: no deletion)
-                                                                        await plannerService.addPlanEntry(dateStr, meal as any, config.id as any, 'Recipe', newVal);
-                                                                        await loadData(days[0], days[10]);
-                                                                    } catch (err) {
-                                                                        console.error('Failed to add meal:', err);
-                                                                    } finally {
-                                                                        setAddingTo(null);
-                                                                        setSelectedRecipe('');
-                                                                    }
-                                                                }}
-                                                                getOptionValue={(r) => r.id}
-                                                                getOptionLabel={(r) => r.grocery_list?.name || r.name}
-                                                                placeholder="Select recipe..."
-                                                                searchPlaceholder="Search recipes..."
-                                                                autoFocus
-                                                                onAddNew={() => {
-                                                                    setPendingDesktopSlot({ date: day, meal: `${config.id}-${meal}` });
-                                                                    setIsAddRecipeModalOpen(true);
-                                                                }}
-                                                                addNewLabel="Create new recipe..."
-                                                            />
-                                                            <button
-                                                                onClick={() => {
-                                                                    setAddingTo(null);
-                                                                    setSelectedRecipe('');
-                                                                }}
-                                                                className="p-1 text-[10px] text-ink-400 hover:text-ink-600 hover:bg-base-200 rounded flex items-center justify-center gap-1"
-                                                            >
-                                                                <X size={10} /> Cancel
-                                                            </button>
-                                                        </div>
-                                                    ) : hasPlans ? (
-                                                        <div className="h-full flex flex-col justify-between">
-                                                            <div className="space-y-1">
-                                                                {/* Show up to 2 recipes as chips, collapse rest */}
-                                                                {slotPlans.length <= 2 ? (
-                                                                    recipesInSlot.map(({ planId, name }) => (
-                                                                        <div key={planId} className="flex items-center gap-1 group/chip">
-                                                                            <span className="text-[11px] font-semibold text-ink-900 line-clamp-1 leading-tight flex-1">
-                                                                                {name}
-                                                                            </span>
-                                                                            <button
-                                                                                onClick={async (e) => {
-                                                                                    e.stopPropagation();
-                                                                                    try {
-                                                                                        await plannerService.deletePlanEntry(planId);
-                                                                                        await loadData(days[0], days[10]);
-                                                                                    } catch (err) {
-                                                                                        console.error('Failed to delete meal:', err);
-                                                                                    }
-                                                                                }}
-                                                                                className="p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400"
-                                                                            >
-                                                                                <X size={10} />
-                                                                            </button>
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <>
-                                                                        <div className="flex items-center gap-1 group/chip">
-                                                                            <span className="text-[11px] font-semibold text-ink-900 line-clamp-1 leading-tight flex-1">
-                                                                                {recipesInSlot[0].name}
-                                                                            </span>
-                                                                            <button
-                                                                                onClick={async (e) => {
-                                                                                    e.stopPropagation();
-                                                                                    try {
-                                                                                        await plannerService.deletePlanEntry(recipesInSlot[0].planId);
-                                                                                        await loadData(days[0], days[10]);
-                                                                                    } catch (err) {
-                                                                                        console.error('Failed to delete meal:', err);
-                                                                                    }
-                                                                                }}
-                                                                                className="p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400"
-                                                                            >
-                                                                                <X size={10} />
-                                                                            </button>
-                                                                        </div>
-                                                                        <span className="text-[10px] text-ink-400">
-                                                                            +{slotPlans.length - 1} more recipe{slotPlans.length > 2 ? 's' : ''}
-                                                                        </span>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                            <button
-                                                                onClick={() => setAddingTo({ date: day, meal: `${config.id}-${meal}` })}
-                                                                className="flex items-center justify-end gap-1 text-[10px] text-accent mt-1 hover:text-accent/80"
-                                                            >
-                                                                <Plus size={10} /> Add
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => setAddingTo({ date: day, meal: `${config.id}-${meal}` })}
-                                                            className="w-full h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-base-200/50 rounded-md border border-dashed border-base-300"
-                                                        >
-                                                            <Plus size={14} className="text-ink-300" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            );
-                                        })
-                                    )}
+                        {/* Drawer Content */}
+                        <div className="p-6 flex-1 overflow-y-auto bg-base-50/30">
+                            <div className="bg-white p-5 rounded-2xl border border-base-200 shadow-sm space-y-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-ink-900 mb-2">Select Existing Recipe</label>
+                                    <SearchableSelect
+                                        options={recipes}
+                                        value={drawerSelectedRecipe}
+                                        onChange={async (newVal) => {
+                                            if (!newVal) return;
+                                            setDrawerSelectedRecipe(newVal);
+                                            const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
+                                            await handleAddMeal(selectedSlotForDrawer.date, slot, dinerId, newVal);
+                                            setSelectedSlotForDrawer(null);
+                                            setDrawerSelectedRecipe('');
+                                        }}
+                                        getOptionValue={(r) => r.id}
+                                        getOptionLabel={(r) => r.grocery_list?.name || r.name}
+                                        placeholder="Search your library..."
+                                        searchPlaceholder="Search recipes..."
+                                        autoFocus
+                                    />
                                 </div>
-                            ))}
+
+                                <div className="relative py-2">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-base-200"></div>
+                                    </div>
+                                    <div className="relative flex justify-center text-xs uppercase font-bold tracking-widest text-ink-300">
+                                        <span className="bg-white px-3">or</span>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    variant="outline"
+                                    className="w-full border-dashed hover:border-accent hover:text-accent hover:bg-accent/5"
+                                    icon={Plus}
+                                    onClick={() => {
+                                        setIsAddRecipeModalOpen(true);
+                                        // The modal appears above the drawer, so we don't close the drawer.
+                                        // When modal finishes, it handles adding the meal.
+                                    }}
+                                >
+                                    Create New Recipe
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                </Card>
+                </>
             )}
+
             <AddRecipeModal
                 isOpen={isAddRecipeModalOpen}
                 onClose={() => {
                     setIsAddRecipeModalOpen(false);
-                    setPendingDesktopSlot(null);
                 }}
                 onRecipeCreated={handleRecipeCreated}
             />
         </div>
     );
-};
+};;

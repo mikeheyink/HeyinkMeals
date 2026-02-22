@@ -5,7 +5,7 @@ import { pantryService } from '../services/pantryService';
 import { Button } from './ui/Button';
 import { SearchableSelect } from './ui/SearchableSelect';
 import { AddGroceryModal } from './AddGroceryModal';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import { ResponsiveModal } from './ui/ResponsiveModal';
 
 interface AddRecipeModalProps {
     isOpen: boolean;
@@ -23,9 +23,6 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
     const [availableGroceries, setAvailableGroceries] = useState<any[]>([]);
     const [isAddGroceryModalOpen, setIsAddGroceryModalOpen] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
-    const modalRef = useRef<HTMLDivElement>(null);
-
-    useFocusTrap({ isOpen: isOpen && !isAddGroceryModalOpen, onClose, containerRef: modalRef });
 
     useEffect(() => {
         if (isOpen) {
@@ -109,148 +106,137 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
         }));
     };
 
-    if (!isOpen) return null;
-
     return (
         <>
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-                {/* Backdrop */}
-                <div
-                    className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                    onClick={onClose}
-                />
+            <ResponsiveModal isOpen={isOpen} onClose={onClose} className="w-full sm:w-[500px] sm:max-h-[85vh] max-h-[90vh]">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-base-300 shrink-0">
+                    <h2 className="text-lg font-semibold text-ink-900">New Recipe</h2>
+                    <button
+                        onClick={onClose}
+                        className="p-2 rounded-full hover:bg-base-200 text-ink-500 transition-colors"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
 
-                {/* Modal */}
-                <div ref={modalRef} className="relative bg-white w-full sm:w-[500px] sm:max-h-[85vh] max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-base-300">
-                        <h2 className="text-lg font-semibold text-ink-900">New Recipe</h2>
-                        <button
-                            onClick={onClose}
-                            className="p-2 rounded-full hover:bg-base-200 text-ink-500 transition-colors"
-                        >
-                            <X size={20} />
-                        </button>
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {error && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-ink-300 mb-1 block">
+                            Recipe Name *
+                        </label>
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g. Grandma's Stew"
+                            className="zen-input w-full text-base"
+                        />
                     </div>
 
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                        {error && (
-                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                                {error}
-                            </div>
-                        )}
-
+                    <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="text-[10px] font-bold uppercase tracking-wider text-ink-300 mb-1 block">
-                                Recipe Name *
+                                Servings
                             </label>
                             <input
-                                ref={inputRef}
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="e.g. Grandma's Stew"
-                                className="zen-input w-full text-base"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-ink-300 mb-1 block">
-                                    Servings
-                                </label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    value={servings}
-                                    onChange={(e) => setServings(Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="zen-input w-full"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-ink-300 mb-1 block">
-                                Ingredients
-                            </label>
-
-                            <div className="mb-2">
-                                <SearchableSelect
-                                    options={availableGroceries}
-                                    value=""
-                                    onChange={(val) => addIngredient(val)}
-                                    getOptionValue={(g) => g.id}
-                                    getOptionLabel={(g) => g.name}
-                                    placeholder="Add an ingredient..."
-                                    searchPlaceholder="Search ingredients..."
-                                    onAddNew={() => setIsAddGroceryModalOpen(true)}
-                                    addNewLabel="Create new ingredient..."
-                                    keepOpenOnSelect={true}
-                                />
-                            </div>
-
-                            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                                {ingredients.map((ing, idx) => (
-                                    <div key={ing.id} className="flex items-center gap-2 bg-base-100 p-2 rounded-lg border border-base-200">
-                                        <div className="flex-1 font-medium text-sm text-ink-900 truncate">
-                                            {ing.name}
-                                        </div>
-                                        <input
-                                            type="number"
-                                            value={ing.quantity}
-                                            onChange={(e) => updateIngredient(idx, 'quantity', e.target.value)}
-                                            className="zen-input w-16 h-8 text-sm p-1 text-center"
-                                            placeholder="Qty"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={ing.unit}
-                                            onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
-                                            className="zen-input w-20 h-8 text-sm p-1"
-                                            placeholder="Unit"
-                                        />
-                                        <button
-                                            onClick={() => removeIngredient(idx)}
-                                            className="p-1.5 text-ink-400 hover:text-red-500 hover:bg-base-200 rounded-md transition-colors"
-                                        >
-                                            <X size={16} />
-                                        </button>
-                                    </div>
-                                ))}
-                                {ingredients.length === 0 && (
-                                    <div className="text-center py-3 text-xs text-ink-400 italic bg-base-100/50 rounded-lg border border-dashed border-base-300">
-                                        No ingredients added yet
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-[10px] font-bold uppercase tracking-wider text-ink-300 mb-1 block">
-                                Instructions (Optional)
-                            </label>
-                            <textarea
-                                value={instructions}
-                                onChange={(e) => setInstructions(e.target.value)}
-                                placeholder="Cooking steps..."
-                                rows={4}
-                                className="zen-input w-full resize-none"
+                                type="number"
+                                min="1"
+                                value={servings}
+                                onChange={(e) => setServings(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="zen-input w-full"
                             />
                         </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="p-4 border-t border-base-300 safe-area-bottom flex gap-3">
-                        <Button variant="outline" onClick={onClose} className="flex-1" disabled={saving}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSave} disabled={saving} className="flex-1" icon={saving ? Loader2 : Save}>
-                            {saving ? 'Creating...' : 'Create Recipe'}
-                        </Button>
+                    <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-ink-300 mb-1 block">
+                            Ingredients
+                        </label>
+
+                        <div className="mb-2">
+                            <SearchableSelect
+                                options={availableGroceries}
+                                value=""
+                                onChange={(val) => addIngredient(val)}
+                                getOptionValue={(g) => g.id}
+                                getOptionLabel={(g) => g.name}
+                                placeholder="Add an ingredient..."
+                                searchPlaceholder="Search ingredients..."
+                                onAddNew={() => setIsAddGroceryModalOpen(true)}
+                                addNewLabel="Create new ingredient..."
+                                keepOpenOnSelect={true}
+                            />
+                        </div>
+
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                            {ingredients.map((ing, idx) => (
+                                <div key={ing.id} className="flex items-center gap-2 bg-base-100 p-2 rounded-lg border border-base-200">
+                                    <div className="flex-1 font-medium text-sm text-ink-900 truncate">
+                                        {ing.name}
+                                    </div>
+                                    <input
+                                        type="number"
+                                        value={ing.quantity}
+                                        onChange={(e) => updateIngredient(idx, 'quantity', e.target.value)}
+                                        className="zen-input w-16 h-8 text-sm p-1 text-center"
+                                        placeholder="Qty"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={ing.unit}
+                                        onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
+                                        className="zen-input w-20 h-8 text-sm p-1"
+                                        placeholder="Unit"
+                                    />
+                                    <button
+                                        onClick={() => removeIngredient(idx)}
+                                        className="p-1.5 text-ink-400 hover:text-red-500 hover:bg-base-200 rounded-md transition-colors"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            ))}
+                            {ingredients.length === 0 && (
+                                <div className="text-center py-3 text-xs text-ink-400 italic bg-base-100/50 rounded-lg border border-dashed border-base-300">
+                                    No ingredients added yet
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-ink-300 mb-1 block">
+                            Instructions (Optional)
+                        </label>
+                        <textarea
+                            value={instructions}
+                            onChange={(e) => setInstructions(e.target.value)}
+                            placeholder="Cooking steps..."
+                            rows={4}
+                            className="zen-input w-full resize-none"
+                        />
                     </div>
                 </div>
-            </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-base-300 safe-area-bottom shrink-0 flex gap-3">
+                    <Button variant="outline" onClick={onClose} className="flex-1" disabled={saving}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={saving} className="flex-1" icon={saving ? Loader2 : Save}>
+                        {saving ? 'Creating...' : 'Create Recipe'}
+                    </Button>
+                </div>
+            </ResponsiveModal>
 
             <AddGroceryModal
                 isOpen={isAddGroceryModalOpen}
