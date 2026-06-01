@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { format, addDays, startOfDay, parseISO, isToday } from 'date-fns';
-import { ChevronUp, ChevronDown, Settings, ChevronLeft, ChevronRight, X, Plus } from 'lucide-react';
+import { ChevronUp, ChevronDown, Settings, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Button } from '../../components/ui/Button';
@@ -18,12 +19,14 @@ import {
     useMutatePlannerConfig,
     useMutatePlannerAnchor,
     useAddMealPlan,
-    useDeleteMealPlan
+    useDeleteMealPlan,
+    plannerKeys
 } from '../../hooks/queries/usePlannerData';
 import { DEFAULT_PLANNER_CONFIG } from '../../services/preferencesService';
 
 export const PlannerPage = () => {
     const isMobile = useIsMobile();
+    const queryClient = useQueryClient();
     const allSlots = ['Breakfast', 'Lunch', 'Dinner'] as const;
 
     // Local UI State
@@ -115,6 +118,8 @@ export const PlannerPage = () => {
     };
 
     const handleRecipeCreated = async (recipeId: string) => {
+        // Make sure the new recipe shows up in the picker next time the drawer opens.
+        await queryClient.invalidateQueries({ queryKey: plannerKeys.recipes() });
         if (selectedSlotForDrawer) {
             const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
             if (dinerId && slot) {
@@ -346,7 +351,7 @@ export const PlannerPage = () => {
                         <div className="p-6 flex-1 overflow-y-auto bg-base-50/30">
                             <div className="bg-white p-5 rounded-2xl border border-base-200 shadow-sm space-y-4">
                                 <div>
-                                    <label className="block text-sm font-bold text-ink-900 mb-2">Select Existing Recipe</label>
+                                    <label className="block text-sm font-bold text-ink-900 mb-2">Select Recipe</label>
                                     <SearchableSelect
                                         options={recipes}
                                         value={drawerSelectedRecipe}
@@ -362,31 +367,11 @@ export const PlannerPage = () => {
                                         getOptionLabel={(r) => r.grocery_list?.name || r.name}
                                         placeholder="Search your library..."
                                         searchPlaceholder="Search recipes..."
+                                        onAddNew={() => setIsAddRecipeModalOpen(true)}
+                                        addNewLabel="Create new recipe..."
                                         autoFocus
                                     />
                                 </div>
-
-                                <div className="relative py-2">
-                                    <div className="absolute inset-0 flex items-center">
-                                        <div className="w-full border-t border-base-200"></div>
-                                    </div>
-                                    <div className="relative flex justify-center text-xs uppercase font-bold tracking-widest text-ink-300">
-                                        <span className="bg-white px-3">or</span>
-                                    </div>
-                                </div>
-
-                                <Button
-                                    variant="outline"
-                                    className="w-full border-dashed hover:border-accent hover:text-accent hover:bg-accent/5"
-                                    icon={Plus}
-                                    onClick={() => {
-                                        setIsAddRecipeModalOpen(true);
-                                        // The modal appears above the drawer, so we don't close the drawer.
-                                        // When modal finishes, it handles adding the meal.
-                                    }}
-                                >
-                                    Create New Recipe
-                                </Button>
                             </div>
                         </div>
                     </div>

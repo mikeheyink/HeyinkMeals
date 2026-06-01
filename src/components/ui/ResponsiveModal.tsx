@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import { useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface ResponsiveModalProps {
@@ -11,27 +11,16 @@ interface ResponsiveModalProps {
 
 export function ResponsiveModal({ isOpen, onClose, children, className = "w-full sm:w-[400px]" }: ResponsiveModalProps) {
     const modalRef = useRef<HTMLDivElement>(null);
-    const controls = useAnimation();
 
     useFocusTrap({ isOpen, onClose, containerRef: modalRef });
 
-    useEffect(() => {
-        if (isOpen) {
-            controls.start({ y: 0 });
-        }
-    }, [isOpen, controls]);
-
-    const handleDragEnd = async (_event: any, info: any) => {
+    const handleDragEnd = (_event: any, info: any) => {
         const offset = info.offset.y;
         const velocity = info.velocity.y;
-
-        // If dragged down enough or fast enough, close
+        // If dragged down enough or fast enough, close. Otherwise framer
+        // springs back automatically because animate target is still { y: 0 }.
         if (offset > 100 || velocity > 500) {
-            await controls.start({ y: "100%", transition: { duration: 0.2 } });
             onClose();
-        } else {
-            // Snap back
-            controls.start({ y: 0, transition: { type: "spring", bounce: 0, duration: 0.4 } });
         }
     };
 
@@ -53,7 +42,7 @@ export function ResponsiveModal({ isOpen, onClose, children, className = "w-full
                     <motion.div
                         ref={modalRef as any}
                         initial={{ y: "100%" }}
-                        animate={controls}
+                        animate={{ y: 0 }}
                         exit={{ y: "100%", transition: { duration: 0.2 } }}
                         transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                         drag="y"
