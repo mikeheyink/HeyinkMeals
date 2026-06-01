@@ -117,9 +117,10 @@ export function PlannerGrid({
                                                                             e.stopPropagation();
                                                                             await onDeleteMeal(planId);
                                                                         }}
-                                                                        className="p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400 opacity-0 group-hover/chip:opacity-100 focus:opacity-100"
-                                                                    >
-                                                                        <X size={10} />
+                                                                        className="p-1 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400"
+                                                                    title="Remove meal"
+    >
+                                                                        <X size={14} />
                                                                     </button>
                                                                 </div>
                                                             ))
@@ -134,9 +135,10 @@ export function PlannerGrid({
                                                                             e.stopPropagation();
                                                                             await onDeleteMeal(recipesInSlot[0].planId);
                                                                         }}
-                                                                        className="p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400 opacity-0 group-hover/chip:opacity-100 focus:opacity-100"
-                                                                    >
-                                                                        <X size={10} />
+                                                                        className="p-1 rounded hover:bg-red-100 hover:text-red-600 transition-all text-ink-400"
+                                                                    title="Remove meal"
+    >
+                                                                        <X size={14} />
                                                                     </button>
                                                                 </div>
                                                                 <span className="text-[10px] text-ink-400">

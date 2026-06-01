@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search, X } from 'lucide-react';
 
 interface SearchableSelectProps<T> {
@@ -35,9 +36,11 @@ export function SearchableSelect<T>({
     const [isOpen, setIsOpen] = useState(autoFocus);
     const [search, setSearch] = useState('');
     const [highlightedIndex, setHighlightedIndex] = useState(0);
+    const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number; openUp: boolean; maxHeight: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const triggerButtonRef = useRef<HTMLButtonElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
     const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
     // Get selected option label
@@ -55,10 +58,13 @@ export function SearchableSelect<T>({
     // Total navigable items (options + "Add New" if present)
     const totalItems = sortedAndFilteredOptions.length + (onAddNew ? 1 : 0);
 
-    // Close dropdown when clicking outside
+    // Close dropdown when clicking outside (account for portal-rendered dropdown)
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+            const target = e.target as Node;
+            const insideTrigger = containerRef.current?.contains(target);
+            const insideDropdown = dropdownRef.current?.contains(target);
+            if (!insideTrigger && !insideDropdown) {
                 setIsOpen(false);
                 setSearch('');
             }
@@ -68,6 +74,40 @@ export function SearchableSelect<T>({
             document.addEventListener('mousedown', handleClickOutside);
         }
         return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    // Compute portal dropdown position based on trigger button's viewport rect.
+    // Recomputes on open, scroll, and resize so the dropdown stays anchored.
+    useLayoutEffect(() => {
+        if (!isOpen) {
+            setDropdownRect(null);
+            return;
+        }
+
+        const compute = () => {
+            const btn = triggerButtonRef.current;
+            if (!btn) return;
+            const rect = btn.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom - 8;
+            const spaceAbove = rect.top - 8;
+            const preferUp = spaceBelow < 240 && spaceAbove > spaceBelow;
+            const maxHeight = Math.max(180, Math.min(420, preferUp ? spaceAbove : spaceBelow));
+            setDropdownRect({
+                top: preferUp ? rect.top - 4 : rect.bottom + 4,
+                left: rect.left,
+                width: rect.width,
+                openUp: preferUp,
+                maxHeight,
+            });
+        };
+
+        compute();
+        window.addEventListener('scroll', compute, true);
+        window.addEventListener('resize', compute);
+        return () => {
+            window.removeEventListener('scroll', compute, true);
+            window.removeEventListener('resize', compute);
+        };
     }, [isOpen]);
 
     // Focus search input when dropdown opens
@@ -151,11 +191,24 @@ export function SearchableSelect<T>({
                 />
             </button>
 
-            {/* Dropdown */}
-            {isOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-base-300 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+            {/* Dropdown — portaled to body so it escapes overflow:hidden modal ancestors */}
+            {isOpen && dropdownRect && createPortal(
+                <div
+                    ref={dropdownRef}
+                    onKeyDown={handleKeyDown}
+                    style={{
+                        position: 'fixed',
+                        top: dropdownRect.openUp ? undefined : dropdownRect.top,
+                        bottom: dropdownRect.openUp ? window.innerHeight - dropdownRect.top : undefined,
+                        left: dropdownRect.left,
+                        width: dropdownRect.width,
+                        maxHeight: dropdownRect.maxHeight,
+                        zIndex: 100,
+                    }}
+                    className="bg-white border border-base-300 rounded-xl shadow-xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-1 duration-150"
+                >
                     {/* Search Input */}
-                    <div className="p-2 border-b border-base-200">
+                    <div className="p-2 border-b border-base-200 shrink-0">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" size={14} />
                             <input
@@ -179,7 +232,7 @@ export function SearchableSelect<T>({
                     </div>
 
                     {/* Options List */}
-                    <div className="max-h-48 overflow-y-auto">
+                    <div className="flex-1 overflow-y-auto">
                         {sortedAndFilteredOptions.length > 0 ? (
                             sortedAndFilteredOptions.map((option, index) => {
                                 const optValue = getOptionValue(option);
@@ -214,7 +267,7 @@ export function SearchableSelect<T>({
 
                     {/* Add New Button */}
                     {onAddNew && (
-                        <div className="border-t border-base-200">
+                        <div className="border-t border-base-200 shrink-0">
                             <button
                                 ref={el => { optionRefs.current[sortedAndFilteredOptions.length] = el; }}
                                 type="button"
@@ -234,7 +287,8 @@ export function SearchableSelect<T>({
                             </button>
                         </div>
                     )}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
