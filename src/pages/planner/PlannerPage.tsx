@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { format, addDays, startOfDay, parseISO, isToday } from 'date-fns';
+import { format, addDays, startOfDay, isToday } from 'date-fns';
 import { ChevronUp, ChevronDown, Settings, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 import { PageHeader } from '../../components/ui/PageHeader';
@@ -13,11 +13,9 @@ import { useIsMobile } from '../../hooks/useMediaQuery';
 
 import {
     usePlannerConfig,
-    usePlannerAnchor,
     usePlannerPlans,
     usePlannerRecipes,
     useMutatePlannerConfig,
-    useMutatePlannerAnchor,
     useAddMealPlan,
     useDeleteMealPlan,
     plannerKeys
@@ -35,10 +33,11 @@ export const PlannerPage = () => {
     const [selectedSlotForDrawer, setSelectedSlotForDrawer] = useState<{ date: Date; meal: string } | null>(null);
     const [drawerSelectedRecipe, setDrawerSelectedRecipe] = useState('');
 
+    // Anchor (leftmost visible day). Local-only — every hard refresh resets to today.
+    const [anchorDate, setAnchorDate] = useState<Date>(() => startOfDay(new Date()));
+
     // React Query Data
     const { data: plannerConfig = DEFAULT_PLANNER_CONFIG } = usePlannerConfig();
-    const { data: anchorDateStr } = usePlannerAnchor();
-    const anchorDate = anchorDateStr ? parseISO(anchorDateStr) : startOfDay(new Date());
 
     // Derived Date State
     const days = Array.from({ length: 11 }, (_, i) => addDays(anchorDate, i));
@@ -52,20 +51,17 @@ export const PlannerPage = () => {
 
     // React Query Mutations
     const { mutate: updateConfig } = useMutatePlannerConfig();
-    const { mutate: updateAnchor } = useMutatePlannerAnchor();
     const { mutateAsync: addMealPlan } = useAddMealPlan();
     const { mutateAsync: deleteMealPlan } = useDeleteMealPlan();
 
     // Navigation handlers
     const navigateWeek = (direction: 'prev' | 'next') => {
         const offset = direction === 'prev' ? -7 : 7;
-        const newAnchor = startOfDay(addDays(anchorDate, offset));
-        updateAnchor(format(newAnchor, 'yyyy-MM-dd'));
+        setAnchorDate(startOfDay(addDays(anchorDate, offset)));
     };
 
     const jumpToToday = () => {
-        const today = startOfDay(new Date());
-        updateAnchor(format(today, 'yyyy-MM-dd'));
+        setAnchorDate(startOfDay(new Date()));
     };
 
     // Config handlers
