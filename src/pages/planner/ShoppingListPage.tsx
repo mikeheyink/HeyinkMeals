@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { plannerService } from '../../services/plannerService';
 import { Button } from '../../components/ui/Button';
-import { RefreshCw, Archive, ShoppingCart, Home, ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { RefreshCw, Archive, Check, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { AddItemModal } from '../../components/AddItemModal';
 import { AddFromListModal } from '../../components/AddFromListModal';
-import { List as ListIcon, Store } from 'lucide-react';
+import { List as ListIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { ResponsiveModal } from '../../components/ui/ResponsiveModal';
 
 export const ShoppingListPage = () => {
     const [items, setItems] = useState<any[]>([]);
@@ -19,11 +18,9 @@ export const ShoppingListPage = () => {
     const [showAddListModal, setShowAddListModal] = useState(false);
     const [groupByShop, setGroupByShop] = useState(false);
 
-    // Edit Store State
+    // Store assignment state
     const [stores, setStores] = useState<any[]>([]);
-    const [editingItemStore, setEditingItemStore] = useState<any | null>(null);
-    const [selectedStoreId, setSelectedStoreId] = useState<string>('');
-    const [isSavingStore, setIsSavingStore] = useState(false);
+    const [savingStoreForType, setSavingStoreForType] = useState<string | null>(null);
 
     const loadList = async () => {
         setLoading(true);
@@ -71,36 +68,34 @@ export const ShoppingListPage = () => {
         }
     };
 
-    const handleSaveStore = async () => {
-        if (!editingItemStore) return;
-        setIsSavingStore(true);
+    const handleSetStore = async (groceryTypeId: string, storeId: string | null) => {
+        if (!groceryTypeId) return;
+        setSavingStoreForType(groceryTypeId);
+        const nextStore = storeId ? stores.find(s => s.id === storeId) || null : null;
+
+        setItems(prev => prev.map(item => {
+            if (item.grocery_types?.id === groceryTypeId) {
+                return {
+                    ...item,
+                    grocery_types: {
+                        ...item.grocery_types,
+                        store: nextStore,
+                    },
+                };
+            }
+            return item;
+        }));
+
         try {
-            const groceryTypeId = editingItemStore.grocery_types?.id;
-            // Update the default_store_id on the grocery type
             await supabase
                 .from('grocery_types')
-                .update({ default_store_id: selectedStoreId || null })
+                .update({ default_store_id: storeId })
                 .eq('id', groceryTypeId);
-
-            // Optimistically update local state so we don't need a full reload immediately
-            setItems(prev => prev.map(item => {
-                if (item.grocery_types?.id === groceryTypeId) {
-                    return {
-                        ...item,
-                        grocery_types: {
-                            ...item.grocery_types,
-                            store: stores.find(s => s.id === selectedStoreId) || null
-                        }
-                    };
-                }
-                return item;
-            }));
-
-            setEditingItemStore(null);
         } catch (e) {
             console.error(e);
+            await loadList();
         } finally {
-            setIsSavingStore(false);
+            setSavingStoreForType(null);
         }
     };
 
@@ -136,72 +131,83 @@ export const ShoppingListPage = () => {
         return acc;
     }, {});
 
-    const renderItem = (item: any, isCompleted = false) => (
-        <div key={item.id} className={`grid grid-cols-[1fr_auto] items-center gap-4 p-3 hover:bg-base-100 transition-colors border-b border-base-300 last:border-0 ${isCompleted ? 'opacity-50' : 'bg-white'}`}>
-            <div className="min-w-0">
-                <div className="flex items-center gap-3 mb-0.5">
-                    <h3 className={`text-sm font-semibold text-ink-900 truncate ${isCompleted ? 'line-through' : ''}`}>
-                        {item.grocery_types?.name}
-                    </h3>
-                    <span className="text-sm font-bold text-accent">
-                        {item.quantity} {item.unit}
-                    </span>
+    const renderItem = (item: any, isCompleted = false) => {
+        const groceryTypeId = item.grocery_types?.id;
+        const currentStoreId = item.grocery_types?.store?.id || null;
+        const isSavingStore = savingStoreForType === groceryTypeId;
+
+        return (
+            <div key={item.id} className={`grid grid-cols-[1fr_auto] items-center gap-4 p-3 hover:bg-base-100 transition-colors border-b border-base-300 last:border-0 ${isCompleted ? 'opacity-50' : 'bg-white'}`}>
+                <div className="min-w-0">
+                    <div className="flex items-center gap-3 mb-0.5">
+                        <h3 className={`text-sm font-semibold text-ink-900 truncate ${isCompleted ? 'line-through' : ''}`}>
+                            {item.grocery_types?.name}
+                        </h3>
+                        <span className="text-sm font-bold text-accent">
+                            {item.quantity} {item.unit}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-ink-500 font-medium">
+                        {item.meal_plan ? (
+                            <>
+                                <span className="truncate max-w-[150px]">{item.recipe?.grocery_list?.name || item.recipe?.name}</span>
+                                <span className="text-ink-300">•</span>
+                                <span className="capitalize">{format(new Date(item.meal_plan.date), 'EEEE')}</span>
+                                <span className="text-ink-300">•</span>
+                                <span>{item.meal_plan.slot}</span>
+                                <span className="text-ink-300">•</span>
+                                <span>For {item.meal_plan.diner_type}</span>
+                            </>
+                        ) : (
+                            <span>General Requirement</span>
+                        )}
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 text-[10px] text-ink-500 font-medium">
-                    {item.meal_plan ? (
-                        <>
-                            <span className="truncate max-w-[150px]">{item.recipe?.grocery_list?.name || item.recipe?.name}</span>
-                            <span className="text-ink-300">•</span>
-                            <span className="capitalize">{format(new Date(item.meal_plan.date), 'EEEE')}</span>
-                            <span className="text-ink-300">•</span>
-                            <span>{item.meal_plan.slot}</span>
-                            <span className="text-ink-300">•</span>
-                            <span>For {item.meal_plan.diner_type}</span>
-                        </>
-                    ) : (
-                        <span>General Requirement</span>
+                <div className="flex items-center gap-3 px-2 border-l border-base-300 ml-4">
+                    {!isCompleted && stores.length > 0 && (
+                        <div className="flex gap-1" role="group" aria-label="Preferred store">
+                            {stores.map(store => {
+                                const isActive = currentStoreId === store.id;
+                                return (
+                                    <button
+                                        key={store.id}
+                                        onClick={() => handleSetStore(groceryTypeId, isActive ? null : store.id)}
+                                        disabled={isSavingStore}
+                                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                            isActive
+                                                ? 'bg-accent text-white border-accent'
+                                                : 'bg-white text-ink-500 border-base-300 hover:border-accent hover:text-accent'
+                                        } ${isSavingStore ? 'opacity-60 cursor-wait' : ''}`}
+                                        title={isActive ? `Clear preferred store (${store.name})` : `Set preferred store to ${store.name}`}
+                                    >
+                                        {store.name}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     )}
+                    <div className="flex gap-1.5">
+                        {isCompleted ? (
+                            <button
+                                onClick={() => handleToggle(item.id, item.is_purchased ? 'is_purchased' : 'is_in_stock', true)}
+                                className="text-[10px] font-bold text-ink-300 hover:text-accent uppercase tracking-wider"
+                            >
+                                Restore
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => handleToggle(item.id, 'is_purchased', item.is_purchased)}
+                                className="p-1.5 rounded text-ink-300 hover:text-success hover:bg-success/5 transition-all"
+                                title="Mark as done"
+                            >
+                                <Check size={18} />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
-            <div className="flex gap-1.5 px-2 border-l border-base-300 ml-4">
-                {isCompleted ? (
-                    <button
-                        onClick={() => handleToggle(item.id, item.is_purchased ? 'is_purchased' : 'is_in_stock', true)}
-                        className="text-[10px] font-bold text-ink-300 hover:text-accent uppercase tracking-wider"
-                    >
-                        Restore
-                    </button>
-                ) : (
-                    <>
-                        <button
-                            onClick={() => handleToggle(item.id, 'is_purchased', item.is_purchased)}
-                            className="p-1.5 rounded text-ink-300 hover:text-success hover:bg-success/5 transition-all"
-                            title="Mark as Purchased"
-                        >
-                            <ShoppingCart size={18} />
-                        </button>
-                        <button
-                            onClick={() => handleToggle(item.id, 'is_in_stock', item.is_in_stock)}
-                            className="p-1.5 rounded text-ink-300 hover:text-accent hover:bg-accent/5 transition-all"
-                            title="I have this in stock"
-                        >
-                            <Home size={18} />
-                        </button>
-                        <button
-                            onClick={() => {
-                                setEditingItemStore(item);
-                                setSelectedStoreId(item.grocery_types?.store?.id || '');
-                            }}
-                            className="p-1.5 rounded text-ink-300 hover:text-accent hover:bg-accent/5 transition-all"
-                            title="Edit Preferred Store"
-                        >
-                            <Store size={18} />
-                        </button>
-                    </>
-                )}
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <>
@@ -344,43 +350,6 @@ export const ShoppingListPage = () => {
                 onClose={() => setShowAddListModal(false)}
                 onItemsAdded={() => { loadList(); }}
             />
-
-            <ResponsiveModal isOpen={!!editingItemStore} onClose={() => setEditingItemStore(null)} className="w-full sm:w-[400px]">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-base-300">
-                    <h2 className="text-lg font-semibold text-ink-900">Preferred Store</h2>
-                    <button
-                        onClick={() => setEditingItemStore(null)}
-                        className="p-2 rounded-full hover:bg-base-200 text-ink-500 transition-colors"
-                    >
-                        <Store size={20} className="opacity-0 absolute" /> {/* Just for spacing if needed or use X */}
-                        <span className="text-xl leading-none">&times;</span>
-                    </button>
-                </div>
-                <div className="p-4 space-y-4">
-                    <p className="text-sm text-ink-600">
-                        Select the preferred store for <strong className="text-ink-900">{editingItemStore?.grocery_types?.name}</strong>.
-                        This will be saved for all future shopping lists.
-                    </p>
-                    <select
-                        value={selectedStoreId}
-                        onChange={(e) => setSelectedStoreId(e.target.value)}
-                        className="zen-input w-full"
-                    >
-                        <option value="">No Preferred Store</option>
-                        {stores.map(store => (
-                            <option key={store.id} value={store.id}>{store.name}</option>
-                        ))}
-                    </select>
-                </div>
-                <div className="p-4 border-t border-base-300 safe-area-bottom flex justify-end gap-3">
-                    <Button variant="ghost" onClick={() => setEditingItemStore(null)} disabled={isSavingStore}>
-                        Cancel
-                    </Button>
-                    <Button variant="primary" onClick={handleSaveStore} disabled={isSavingStore}>
-                        {isSavingStore ? 'Saving...' : 'Save'}
-                    </Button>
-                </div>
-            </ResponsiveModal>
         </>
     );
 };
