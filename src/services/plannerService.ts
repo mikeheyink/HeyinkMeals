@@ -104,9 +104,10 @@ export const plannerService = {
                 *,
                 recipe: recipes (name, grocery_list:grocery_lists!ingredients_list_id (name)),
                 grocery_types (
+                    id,
                     name,
                     category: grocery_categories (name),
-                    store: stores (name)
+                    store: stores (id, name)
                 ),
                 meal_plan: meal_plan_entries (
                     date,
