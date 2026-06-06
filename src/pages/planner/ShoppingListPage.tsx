@@ -165,7 +165,7 @@ export const ShoppingListPage = () => {
                 </div>
                 <div className="flex items-center gap-3 px-2 border-l border-base-300 ml-4">
                     {!isCompleted && stores.length > 0 && (
-                        <div className="flex gap-1" role="group" aria-label="Preferred store">
+                        <div className="hidden md:flex gap-1" role="group" aria-label="Preferred store">
                             {stores.map(store => {
                                 const isActive = currentStoreId === store.id;
                                 return (
