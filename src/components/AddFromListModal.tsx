@@ -91,6 +91,7 @@ export function AddFromListModal({ isOpen, onClose, onItemsAdded }: AddFromListM
                         placeholder={loading ? "Loading lists..." : "Choose a list..."}
                         searchPlaceholder="Search lists..."
                         disabled={loading || submitting}
+                        autoFocus
                     />
                     <p className="text-xs text-ink-400">
                         All items from the selected list will be added to your shopping list.

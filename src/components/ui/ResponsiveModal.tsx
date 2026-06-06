@@ -27,7 +27,7 @@ export function ResponsiveModal({ isOpen, onClose, children, className = "w-full
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+                <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center">
                     {/* Backdrop */}
                     <motion.div
                         initial={{ opacity: 0 }}

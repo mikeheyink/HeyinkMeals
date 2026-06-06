@@ -110,12 +110,14 @@ export function SearchableSelect<T>({
         };
     }, [isOpen]);
 
-    // Focus search input when dropdown opens
+    // Focus search input once the portal dropdown has mounted.
+    // We depend on dropdownRect because the input lives inside the portal,
+    // which only renders after the first pass computes the trigger's rect.
     useEffect(() => {
-        if (isOpen && searchInputRef.current) {
+        if (isOpen && dropdownRect && searchInputRef.current) {
             searchInputRef.current.focus();
         }
-    }, [isOpen]);
+    }, [isOpen, dropdownRect]);
 
     // Reset highlighted index when search changes or dropdown opens
     useEffect(() => {
