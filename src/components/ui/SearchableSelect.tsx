@@ -174,7 +174,7 @@ export function SearchableSelect<T>({
     };
 
     return (
-        <div ref={containerRef} className={`relative ${className}`} onKeyDown={handleKeyDown}>
+        <div ref={containerRef} className={`relative ${className}`}>
             {/* Trigger Button */}
             <button
                 ref={triggerButtonRef}
