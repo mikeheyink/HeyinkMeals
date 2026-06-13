@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      dev_notes: {
+        Row: {
+          context: string | null
+          created_at: string | null
+          done_at: string | null
+          id: string
+          note: string
+          status: string
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string | null
+          done_at?: string | null
+          id?: string
+          note: string
+          status?: string
+        }
+        Update: {
+          context?: string | null
+          created_at?: string | null
+          done_at?: string | null
+          id?: string
+          note?: string
+          status?: string
+        }
+        Relationships: []
+      }
       grocery_categories: {
         Row: {
           id: string
@@ -145,27 +172,91 @@ export type Database = {
           date: string
           diner_type: string
           id: string
-          plan_type: string
-          reference_id: string
+          entry_type: string | null
+          recipe_id: string | null
+          list_id: string | null
+          item_grocery_type_id: string | null
+          quantity: number | null
+          unit: string | null
+          note_text: string | null
+          servings: number | null
           slot: string
+          // Legacy (pre-redesign) columns — dropped by 20260613_cleanup.sql
+          plan_type?: string | null
+          reference_id?: string | null
         }
         Insert: {
           date: string
           diner_type: string
           id?: string
-          plan_type: string
-          reference_id: string
+          entry_type?: string | null
+          recipe_id?: string | null
+          list_id?: string | null
+          item_grocery_type_id?: string | null
+          quantity?: number | null
+          unit?: string | null
+          note_text?: string | null
+          servings?: number | null
           slot: string
+          plan_type?: string | null
+          reference_id?: string | null
         }
         Update: {
           date?: string
           diner_type?: string
           id?: string
-          plan_type?: string
-          reference_id?: string
+          entry_type?: string | null
+          recipe_id?: string | null
+          list_id?: string | null
+          item_grocery_type_id?: string | null
+          quantity?: number | null
+          unit?: string | null
+          note_text?: string | null
+          servings?: number | null
           slot?: string
+          plan_type?: string | null
+          reference_id?: string | null
         }
         Relationships: []
+      }
+      recipe_ingredients: {
+        Row: {
+          id: string
+          recipe_id: string | null
+          grocery_type_id: string | null
+          quantity: number | null
+          unit: string | null
+        }
+        Insert: {
+          id?: string
+          recipe_id?: string | null
+          grocery_type_id?: string | null
+          quantity?: number | null
+          unit?: string | null
+        }
+        Update: {
+          id?: string
+          recipe_id?: string | null
+          grocery_type_id?: string | null
+          quantity?: number | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ingredients_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_grocery_type_id_fkey"
+            columns: ["grocery_type_id"]
+            isOneToOne: false
+            referencedRelation: "grocery_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       recipes: {
         Row: {

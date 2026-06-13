@@ -3,14 +3,14 @@ import { groceryListService } from '../../services/groceryListService';
 
 export const groceryKeys = {
     all: ['groceries'] as const,
-    grouped: () => [...groceryKeys.all, 'grouped'] as const,
+    lists: () => [...groceryKeys.all, 'lists'] as const,
     details: (id: string) => [...groceryKeys.all, 'details', id] as const,
 };
 
-export function useGroceryListsGrouped() {
+export function useLists() {
     return useQuery({
-        queryKey: groceryKeys.grouped(),
-        queryFn: () => groceryListService.getGroceryListsGrouped(),
+        queryKey: groceryKeys.lists(),
+        queryFn: () => groceryListService.getLists(),
     });
 }
 
@@ -19,6 +19,27 @@ export function useGroceryListDetails(listId: string | null) {
         queryKey: groceryKeys.details(listId!),
         queryFn: () => groceryListService.getGroceryListDetails(listId!),
         enabled: !!listId,
+    });
+}
+
+export function useCreateList() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (name: string) => groceryListService.createList(name),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: groceryKeys.lists() });
+        },
+    });
+}
+
+export function useRenameList() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ listId, name }: { listId: string; name: string }) =>
+            groceryListService.renameList(listId, name),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: groceryKeys.all });
+        },
     });
 }
 
@@ -33,7 +54,7 @@ export function useAddGroceryItem() {
         }) => groceryListService.addItem(listId, groceryTypeId, quantity, unit),
         onSuccess: (_, { listId }) => {
             queryClient.invalidateQueries({ queryKey: groceryKeys.details(listId) });
-            queryClient.invalidateQueries({ queryKey: groceryKeys.grouped() });
+            queryClient.invalidateQueries({ queryKey: groceryKeys.lists() });
         },
     });
 }
@@ -59,43 +80,10 @@ export function useDeleteGroceryItem() {
     });
 }
 
-export function useClearGroceryRecipe() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: (recipeId: string) => groceryListService.clearRecipe(recipeId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: groceryKeys.all });
-        }
-    });
-}
-
 export function useDeleteGroceryList() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (listId: string) => groceryListService.deleteGroceryList(listId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: groceryKeys.all });
-        }
-    });
-}
-
-export function useAddRecipeToList() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: ({ listId, name, servings }: { listId: string, name: string, servings?: number }) =>
-            groceryListService.createRecipeForList(listId, name, servings),
-        onSuccess: (_, { listId }) => {
-            queryClient.invalidateQueries({ queryKey: groceryKeys.details(listId) });
-            queryClient.invalidateQueries({ queryKey: groceryKeys.grouped() });
-        }
-    });
-}
-
-export function useUpdateGroceryRecipe() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: ({ recipeId, updates }: { recipeId: string, updates: { name?: string, servings?: number, instructions?: string, web_source?: string } }) =>
-            groceryListService.updateRecipe(recipeId, updates),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: groceryKeys.all });
         }

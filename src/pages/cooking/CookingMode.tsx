@@ -36,8 +36,10 @@ export const CookingMode = () => {
 
                 if (mealData) {
                     setMeal(mealData);
-                    const recipeData = await recipeService.getRecipe(mealData.reference_id);
-                    setRecipe(recipeData);
+                    if (mealData.recipe_id) {
+                        const recipeData = await recipeService.getRecipe(mealData.recipe_id);
+                        setRecipe(recipeData);
+                    }
                 }
             } catch (e) {
                 console.error(e);
@@ -129,7 +131,7 @@ export const CookingMode = () => {
                             Mise en Place
                         </h2>
                         <Card className="p-4 space-y-2">
-                            {recipe?.ingredients_list?.items.map((item: any) => (
+                            {recipe?.ingredients?.map((item: any) => (
                                 <label
                                     key={item.id}
                                     className={`flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer hover:bg-base-200 ${checkedIngredients.has(item.id) ? 'opacity-50' : ''}`}

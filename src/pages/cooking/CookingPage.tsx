@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { format, addDays, startOfDay, isToday, isSameDay } from 'date-fns';
 import { plannerService } from '../../services/plannerService';
-import { preferencesService } from '../../services/preferencesService';
+import { preferencesService, DEFAULT_PLANNER_CONFIG } from '../../services/preferencesService';
 import type { PlannerConfigItem } from '../../services/preferencesService';
 import { Button } from '../../components/ui/Button';
 import { ChefHat, ChevronRight, ChevronLeft, BookOpen } from 'lucide-react';
@@ -9,18 +9,12 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { MobileCookingView } from '../../components/MobileCookingView';
 import { useIsMobile } from '../../hooks/useMediaQuery';
-
-const DEFAULT_PLANNER_CONFIG: PlannerConfigItem[] = [
-    { id: 'Everyone', slots: ['Breakfast', 'Lunch', 'Dinner'] },
-    { id: 'Parents', slots: ['Breakfast', 'Lunch', 'Dinner'] },
-    { id: 'Children', slots: ['Breakfast', 'Lunch', 'Dinner'] }
-];
+import { planEntryLabel, isCookable } from '../../lib/planEntry';
 
 export const CookingPage = () => {
     const navigate = useNavigate();
     const [days, setDays] = useState<Date[]>([]);
     const [plans, setPlans] = useState<any[]>([]);
-    const [recipes, setRecipes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [anchorDate, setAnchorDate] = useState<Date>(startOfDay(new Date()));
     const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
@@ -90,9 +84,6 @@ export const CookingPage = () => {
             const endStr = format(end, 'yyyy-MM-dd');
             const p = await plannerService.getPlanForRange(startStr, endStr);
             setPlans(p || []);
-
-            const recipeData = await plannerService.getRecipesWithListNames();
-            if (recipeData) setRecipes(recipeData);
         } catch (e) {
             console.error(e);
         } finally {
@@ -150,7 +141,6 @@ export const CookingPage = () => {
                 <MobileCookingView
                     days={days}
                     plans={plans}
-                    recipes={recipes}
                     activeConfigs={activeConfigs}
                     anchorDate={anchorDate}
                     selectedDate={selectedDate}
@@ -222,8 +212,7 @@ export const CookingPage = () => {
                                             <div key={`${config.id}-${meal}`} className={`p-3 min-h-[120px] bg-white group border-r border-base-300 last:border-r-0 flex flex-col justify-start items-start transition-colors gap-2 ${isToday(day) ? 'bg-accent/[0.01]' : ''}`}>
                                                 {slotPlans.length > 0 ? (
                                                     slotPlans.map((plan) => {
-                                                        const recipeData = recipes.find(r => r.id === plan.reference_id);
-                                                        const currentRecipeName = recipeData?.grocery_list?.name || recipeData?.name || null;
+                                                        const cookable = isCookable(plan);
                                                         return (
                                                             <div key={plan.id} className="w-full">
                                                                 <div className="space-y-1">
@@ -232,19 +221,21 @@ export const CookingPage = () => {
                                                                         <span className="text-[9px] font-bold uppercase tracking-tight">{meal}</span>
                                                                     </div>
                                                                     <span className="text-xs font-bold text-ink-900 line-clamp-2 leading-tight block">
-                                                                        {currentRecipeName}
+                                                                        {planEntryLabel(plan)}
                                                                     </span>
                                                                 </div>
-                                                                <Button
-                                                                    onClick={() => navigate(`/cooking/${plan.id}`)}
-                                                                    variant="primary"
-                                                                    className="w-full mt-2 h-8 text-[10px] font-black uppercase tracking-widest py-0 px-2 justify-between group/btn"
-                                                                >
-                                                                    <span className="flex items-center gap-1">
-                                                                        <ChevronRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
-                                                                        Start
-                                                                    </span>
-                                                                </Button>
+                                                                {cookable && (
+                                                                    <Button
+                                                                        onClick={() => navigate(`/cooking/${plan.id}`)}
+                                                                        variant="primary"
+                                                                        className="w-full mt-2 h-8 text-[10px] font-black uppercase tracking-widest py-0 px-2 justify-between group/btn"
+                                                                    >
+                                                                        <span className="flex items-center gap-1">
+                                                                            <ChevronRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
+                                                                            Start
+                                                                        </span>
+                                                                    </Button>
+                                                                )}
                                                             </div>
                                                         );
                                                     })
