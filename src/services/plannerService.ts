@@ -1,108 +1,176 @@
 import { supabase } from '../lib/supabase';
-import { recipeService } from './recipeService';
 
-type MealSlot = 'Breakfast' | 'Lunch' | 'Dinner';
-type DinerType = 'Parents' | 'Children' | 'Everyone';
-type PlanType = 'Recipe' | 'AdHocList';
+export type MealSlot = 'Breakfast' | 'Lunch' | 'Dinner';
+export type DinerType = 'Parents' | 'Children' | 'Everyone';
+export type EntryType = 'Recipe' | 'Item' | 'List' | 'Note';
+
+export interface PlanEntryInput {
+    date: string;
+    slot: MealSlot;
+    dinerType: DinerType;
+    entryType: EntryType;
+    recipeId?: string;
+    listId?: string;
+    groceryTypeId?: string;
+    quantity?: number;
+    unit?: string;
+    noteText?: string;
+    servings?: number;
+}
+
+/** A plan entry without the slot coordinates (which the planner supplies). */
+export type PlanEntryDraft = Omit<PlanEntryInput, 'date' | 'slot' | 'dinerType'>;
+
+type ShoppingInsert = {
+    meal_plan_entry_id: string;
+    recipe_id?: string | null;
+    grocery_type_id: string | null;
+    quantity: number;
+    unit: string;
+};
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const plannerService = {
-
     /**
-     * Fetches recipes with their linked grocery list names for display in dropdowns
-     * Excludes recipes with archived grocery lists
+     * Recipes available to schedule (non-archived), with base servings for scaling.
      */
-    async getRecipesWithListNames() {
+    async getRecipesForPicker() {
         const { data, error } = await supabase
             .from('recipes')
-            .select(`
-                id,
-                name,
-                ingredients_list_id,
-                grocery_list:grocery_lists!ingredients_list_id (name, is_archived)
-            `)
+            .select('id, name, servings')
+            .eq('is_archived', false)
             .order('name');
         if (error) throw error;
-
-        // Filter out recipes whose linked list is archived
-        return data?.filter(recipe => {
-            const list = recipe.grocery_list as any; // Temporary fix while Supabase generic types are inferred
-            return !list || !list.is_archived;
-        }) || [];
+        return data ?? [];
     },
 
-    async addPlanEntry(date: string, slot: MealSlot, dinerType: DinerType, type: PlanType, referenceId: string) {
-        // 1. Create the meal plan entry
-        const { data: entry, error: entryError } = await supabase
+    /**
+     * Create a typed meal-plan entry and snapshot the resulting groceries into the
+     * shopping ledger. Snapshot failures throw (so the caller can surface them) rather
+     * than silently leaving a meal with no ingredients on the list.
+     */
+    async addPlanEntry(entry: PlanEntryInput) {
+        const { data: created, error } = await supabase
             .from('meal_plan_entries')
             .insert({
-                date,
-                slot,
-                diner_type: dinerType,
-                plan_type: type,
-                reference_id: referenceId
+                date: entry.date,
+                slot: entry.slot,
+                diner_type: entry.dinerType,
+                entry_type: entry.entryType,
+                recipe_id: entry.entryType === 'Recipe' ? entry.recipeId : null,
+                list_id: entry.entryType === 'List' ? entry.listId : null,
+                item_grocery_type_id: entry.entryType === 'Item' ? entry.groceryTypeId : null,
+                quantity: entry.entryType === 'Item' ? entry.quantity ?? 1 : null,
+                unit: entry.entryType === 'Item' ? entry.unit ?? 'item' : null,
+                note_text: entry.entryType === 'Note' ? entry.noteText ?? '' : null,
+                servings: entry.entryType === 'Recipe' ? entry.servings ?? null : null,
             })
             .select()
             .single();
+        if (error) throw error;
 
-        if (entryError) throw entryError;
+        if (entry.entryType === 'Recipe') {
+            const { data: recipe, error: rErr } = await supabase
+                .from('recipes')
+                .select('servings, ingredients:recipe_ingredients (grocery_type_id, quantity, unit)')
+                .eq('id', entry.recipeId!)
+                .single();
+            if (rErr) throw rErr;
 
-        // 2. Snapshot ingredients into shopping_list_items
-        if (type === 'Recipe') {
-            const recipe = await recipeService.getRecipe(referenceId);
-            if (recipe.ingredients_list && recipe.ingredients_list.items) {
-                const itemsToInsert = recipe.ingredients_list.items.map((item) => ({
-                    meal_plan_entry_id: entry.id,
-                    recipe_id: referenceId,
-                    grocery_type_id: item.grocery_type_id,
-                    quantity: item.quantity || 1,
-                    unit: item.unit || '',
-                    is_in_stock: item.is_in_stock || false,
-                    is_purchased: item.is_purchased || false
+            const base = recipe.servings || 4;
+            const target = entry.servings || base;
+            const factor = base > 0 ? target / base : 1;
+            const ings = (recipe.ingredients ?? []) as {
+                grocery_type_id: string | null;
+                quantity: number | null;
+                unit: string | null;
+            }[];
+
+            const rows: ShoppingInsert[] = ings
+                .filter(i => i.grocery_type_id)
+                .map(i => ({
+                    meal_plan_entry_id: created.id,
+                    recipe_id: entry.recipeId,
+                    grocery_type_id: i.grocery_type_id,
+                    quantity: round2((i.quantity || 1) * factor),
+                    unit: i.unit || 'item',
                 }));
 
-                if (itemsToInsert.length > 0) {
-                    const { error: itemsError } = await supabase
-                        .from('shopping_list_items')
-                        .insert(itemsToInsert);
-                    if (itemsError) console.error('Error snapshotting ingredients:', itemsError);
-                }
+            if (rows.length > 0) {
+                const { error: insErr } = await supabase.from('shopping_list_items').insert(rows);
+                if (insErr) throw insErr;
+            }
+        } else if (entry.entryType === 'Item') {
+            const { error: insErr } = await supabase.from('shopping_list_items').insert({
+                meal_plan_entry_id: created.id,
+                grocery_type_id: entry.groceryTypeId!,
+                quantity: entry.quantity ?? 1,
+                unit: entry.unit ?? 'item',
+            });
+            if (insErr) throw insErr;
+        } else if (entry.entryType === 'List') {
+            const { data: items, error: lErr } = await supabase
+                .from('grocery_list_items')
+                .select('grocery_type_id, quantity, unit')
+                .eq('list_id', entry.listId!)
+                .eq('is_archived', false);
+            if (lErr) throw lErr;
+
+            const rows: ShoppingInsert[] = (items ?? [])
+                .filter(i => i.grocery_type_id)
+                .map(i => ({
+                    meal_plan_entry_id: created.id,
+                    grocery_type_id: i.grocery_type_id,
+                    quantity: i.quantity ?? 1,
+                    unit: i.unit ?? 'item',
+                }));
+
+            if (rows.length > 0) {
+                const { error: insErr } = await supabase.from('shopping_list_items').insert(rows);
+                if (insErr) throw insErr;
             }
         }
+        // 'Note' entries add nothing to the shopping list.
 
-        return entry;
+        return created;
     },
 
     async deletePlanEntry(entryId: string) {
-        // Shopping list items will cascade delete due to FK constraint
-        const { error } = await supabase
-            .from('meal_plan_entries')
-            .delete()
-            .eq('id', entryId);
-
+        // shopping_list_items cascade-delete via FK
+        const { error } = await supabase.from('meal_plan_entries').delete().eq('id', entryId);
         if (error) throw error;
     },
 
+    /**
+     * Plan entries for a date range, with the referenced recipe/list/item names embedded
+     * so the planner/cooking views can render labels without a separate lookup.
+     */
     async getPlanForRange(startDate: string, endDate: string) {
         const { data, error } = await supabase
             .from('meal_plan_entries')
-            .select('*')
+            .select(`
+                *,
+                recipe:recipes (id, name),
+                list:grocery_lists (id, name),
+                item:grocery_types (id, name)
+            `)
             .gte('date', startDate)
             .lte('date', endDate)
             .order('date');
-
         if (error) throw error;
         return data;
     },
 
     /**
-     * Fetches the persistent shopping list items
+     * Persistent shopping ledger (non-archived), with source meal + grocery metadata.
      */
     async getShoppingList() {
         const { data, error } = await supabase
             .from('shopping_list_items')
             .select(`
                 *,
-                recipe: recipes (name, grocery_list:grocery_lists!ingredients_list_id (name)),
+                recipe: recipes (name),
                 grocery_types (
                     id,
                     name,
@@ -117,7 +185,6 @@ export const plannerService = {
             `)
             .eq('is_archived', false)
             .order('created_at', { ascending: false });
-
         if (error) throw error;
         return data;
     },
@@ -129,9 +196,21 @@ export const plannerService = {
             .eq('id', itemId)
             .select()
             .single();
-
         if (error) throw error;
         return data;
+    },
+
+    /**
+     * Bulk-set a status field across several ledger rows (used when toggling an
+     * aggregated shopping-list row that represents multiple underlying items).
+     */
+    async setItemsStatus(itemIds: string[], field: 'is_purchased' | 'is_in_stock', value: boolean) {
+        if (itemIds.length === 0) return;
+        const { error } = await supabase
+            .from('shopping_list_items')
+            .update({ [field]: value })
+            .in('id', itemIds);
+        if (error) throw error;
     },
 
     async archivePurchased() {
@@ -139,12 +218,11 @@ export const plannerService = {
             .from('shopping_list_items')
             .update({ is_archived: true })
             .eq('is_purchased', true);
-
         if (error) throw error;
     },
 
     /**
-     * Adds a manual item to the shopping list (not tied to a meal plan)
+     * Add a manual item to the shopping list (not tied to a meal plan).
      */
     async addManualItem(groceryTypeId: string, quantity: number, unit: string) {
         const { data, error } = await supabase
@@ -154,40 +232,36 @@ export const plannerService = {
                 quantity,
                 unit,
                 meal_plan_entry_id: null,
-                recipe_id: null
+                recipe_id: null,
             })
             .select()
             .single();
-
         if (error) throw error;
         return data;
     },
 
     async addListItemsToShoppingList(listId: string) {
-        // 1. Fetch items from the grocery list
         const { data: listItems, error: fetchError } = await supabase
             .from('grocery_list_items')
             .select('grocery_type_id, quantity, unit')
-            .eq('list_id', listId);
-
+            .eq('list_id', listId)
+            .eq('is_archived', false);
         if (fetchError) throw fetchError;
         if (!listItems || listItems.length === 0) return;
 
-        // 2. Insert into shopping_list_items
-        const itemsToInsert = listItems.map(item => ({
-            grocery_type_id: item.grocery_type_id,
-            quantity: item.quantity ?? 1,
-            unit: item.unit ?? '',
-            is_purchased: false,
-            is_in_stock: false,
-            meal_plan_entry_id: null, // or could link to a generic "AdHoc" entry if needed
-            recipe_id: null
-        }));
+        const itemsToInsert = listItems
+            .filter(item => item.grocery_type_id)
+            .map(item => ({
+                grocery_type_id: item.grocery_type_id,
+                quantity: item.quantity ?? 1,
+                unit: item.unit ?? 'item',
+                is_purchased: false,
+                is_in_stock: false,
+                meal_plan_entry_id: null,
+                recipe_id: null,
+            }));
 
-        const { error: insertError } = await supabase
-            .from('shopping_list_items')
-            .insert(itemsToInsert);
-
+        const { error: insertError } = await supabase.from('shopping_list_items').insert(itemsToInsert);
         if (insertError) throw insertError;
-    }
+    },
 };

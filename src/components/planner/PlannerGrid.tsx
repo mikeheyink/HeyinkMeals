@@ -2,11 +2,11 @@ import { format } from 'date-fns';
 import { Plus, X } from 'lucide-react';
 import { Card } from '../ui/Card';
 import type { PlannerConfigItem } from '../../services/preferencesService';
+import { planEntryLabel } from '../../lib/planEntry';
 
 interface PlannerGridProps {
     days: Date[];
     plans: any[];
-    recipes: any[];
     activeConfigs: PlannerConfigItem[];
     onSelectSlot: (date: Date, mealSlot: string) => void;
     onDeleteMeal: (planId: string) => Promise<void>;
@@ -15,7 +15,6 @@ interface PlannerGridProps {
 export function PlannerGrid({
     days,
     plans,
-    recipes,
     activeConfigs,
     onSelectSlot,
     onDeleteMeal
@@ -86,13 +85,10 @@ export function PlannerGrid({
                                     const hasPlans = slotPlans.length > 0;
                                     const mealSlotStr = `${config.id}-${meal}`;
 
-                                    const recipesInSlot = slotPlans.map(plan => {
-                                        const recipeData = recipes.find(r => r.id === plan.reference_id);
-                                        return {
-                                            planId: plan.id,
-                                            name: recipeData?.grocery_list?.name || recipeData?.name || 'Unknown'
-                                        };
-                                    });
+                                    const recipesInSlot = slotPlans.map(plan => ({
+                                        planId: plan.id,
+                                        name: planEntryLabel(plan)
+                                    }));
 
                                     return (
                                         <div

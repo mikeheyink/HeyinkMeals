@@ -1,13 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { plannerService } from '../../services/plannerService';
+import type { PlanEntryInput } from '../../services/plannerService';
+import { groceryListService } from '../../services/groceryListService';
+import { pantryService } from '../../services/pantryService';
 import { preferencesService } from '../../services/preferencesService';
 import type { PlannerConfigItem } from '../../services/preferencesService';
-import { format } from 'date-fns';
 
 export const plannerKeys = {
     all: ['planner'] as const,
     plans: (start: string, end: string) => [...plannerKeys.all, 'plans', start, end] as const,
     recipes: () => [...plannerKeys.all, 'recipes'] as const,
+    lists: () => [...plannerKeys.all, 'lists'] as const,
+    items: () => [...plannerKeys.all, 'items'] as const,
     config: () => [...plannerKeys.all, 'config'] as const,
     anchor: () => [...plannerKeys.all, 'anchor'] as const,
 };
@@ -26,8 +32,24 @@ export function usePlannerPlans(startDate: Date, endDate: Date) {
 export function usePlannerRecipes() {
     return useQuery({
         queryKey: plannerKeys.recipes(),
-        queryFn: () => plannerService.getRecipesWithListNames(),
+        queryFn: () => plannerService.getRecipesForPicker(),
         staleTime: 1000 * 60 * 15, // 15 mins
+    });
+}
+
+export function usePlannerLists() {
+    return useQuery({
+        queryKey: plannerKeys.lists(),
+        queryFn: () => groceryListService.getAllLists(),
+        staleTime: 1000 * 60 * 15,
+    });
+}
+
+export function usePlannerItems() {
+    return useQuery({
+        queryKey: plannerKeys.items(),
+        queryFn: () => pantryService.getGroceries(),
+        staleTime: 1000 * 60 * 15,
     });
 }
 
@@ -70,16 +92,13 @@ export function useMutatePlannerAnchor() {
 export function useAddMealPlan() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({ date, slot, dinerType, planType, referenceId }: {
-            date: string;
-            slot: 'Breakfast' | 'Lunch' | 'Dinner';
-            dinerType: 'Parents' | 'Children' | 'Everyone';
-            planType: 'Recipe' | 'AdHocList';
-            referenceId: string;
-        }) => plannerService.addPlanEntry(date, slot, dinerType, planType, referenceId),
+        mutationFn: (input: PlanEntryInput) => plannerService.addPlanEntry(input),
         onSuccess: () => {
-            // Invalidate all plan ranges to ensure data is fresh
             queryClient.invalidateQueries({ queryKey: [...plannerKeys.all, 'plans'] });
+        },
+        onError: (err) => {
+            console.error('Failed to add to plan:', err);
+            toast.error('Could not add to the plan. Please try again.');
         },
     });
 }
@@ -89,8 +108,11 @@ export function useDeleteMealPlan() {
     return useMutation({
         mutationFn: (planId: string) => plannerService.deletePlanEntry(planId),
         onSuccess: () => {
-            // Invalidate all plan ranges to ensure data is fresh
             queryClient.invalidateQueries({ queryKey: [...plannerKeys.all, 'plans'] });
+        },
+        onError: (err) => {
+            console.error('Failed to remove from plan:', err);
+            toast.error('Could not remove that entry. Please try again.');
         },
     });
 }

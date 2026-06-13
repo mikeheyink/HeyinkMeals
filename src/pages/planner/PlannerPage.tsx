@@ -8,19 +8,22 @@ import { Button } from '../../components/ui/Button';
 import { MobilePlannerView } from '../../components/MobilePlannerView';
 import { AddRecipeModal } from '../../components/AddRecipeModal';
 import { PlannerGrid } from '../../components/planner/PlannerGrid';
-import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { PlanEntryForm } from '../../components/planner/PlanEntryForm';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 
 import {
     usePlannerConfig,
     usePlannerPlans,
     usePlannerRecipes,
+    usePlannerItems,
+    usePlannerLists,
     useMutatePlannerConfig,
     useAddMealPlan,
     useDeleteMealPlan,
     plannerKeys
 } from '../../hooks/queries/usePlannerData';
 import { DEFAULT_PLANNER_CONFIG } from '../../services/preferencesService';
+import type { PlanEntryDraft, MealSlot, DinerType } from '../../services/plannerService';
 
 export const PlannerPage = () => {
     const isMobile = useIsMobile();
@@ -31,7 +34,6 @@ export const PlannerPage = () => {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false);
     const [selectedSlotForDrawer, setSelectedSlotForDrawer] = useState<{ date: Date; meal: string } | null>(null);
-    const [drawerSelectedRecipe, setDrawerSelectedRecipe] = useState('');
 
     // Anchor (leftmost visible day). Local-only — every hard refresh resets to today.
     const [anchorDate, setAnchorDate] = useState<Date>(() => startOfDay(new Date()));
@@ -48,6 +50,12 @@ export const PlannerPage = () => {
 
     const { data: recipesData } = usePlannerRecipes();
     const recipes = recipesData || [];
+
+    const { data: itemsData } = usePlannerItems();
+    const items = itemsData || [];
+
+    const { data: listsData } = usePlannerLists();
+    const lists = listsData || [];
 
     // React Query Mutations
     const { mutate: updateConfig } = useMutatePlannerConfig();
@@ -90,40 +98,23 @@ export const PlannerPage = () => {
     const activeConfigs = plannerConfig.filter(c => c.slots.length > 0);
 
     // Plan mutations handlers
-    const handleAddMeal = async (date: Date, slot: string, dinerId: string, recipeId: string) => {
-        const dateStr = format(date, 'yyyy-MM-dd');
-        try {
-            await addMealPlan({
-                date: dateStr,
-                slot: slot as any,
-                dinerType: dinerId as any,
-                planType: 'Recipe',
-                referenceId: recipeId
-            });
-        } catch (err) {
-            console.error('Failed to add meal:', err);
-        }
+    const handleAddEntry = async (date: Date, slot: string, dinerId: string, draft: PlanEntryDraft) => {
+        await addMealPlan({
+            date: format(date, 'yyyy-MM-dd'),
+            slot: slot as MealSlot,
+            dinerType: dinerId as DinerType,
+            ...draft,
+        });
     };
 
     const handleDeleteMeal = async (planId: string) => {
-        try {
-            await deleteMealPlan(planId);
-        } catch (err) {
-            console.error('Failed to delete meal:', err);
-        }
+        await deleteMealPlan(planId);
     };
 
-    const handleRecipeCreated = async (recipeId: string) => {
-        // Make sure the new recipe shows up in the picker next time the drawer opens.
+    const handleRecipeCreated = async () => {
+        // Refresh the picker so the newly created recipe is selectable, then let the
+        // user pick it from the form (drawer / mobile editor stays open).
         await queryClient.invalidateQueries({ queryKey: plannerKeys.recipes() });
-        if (selectedSlotForDrawer) {
-            const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
-            if (dinerId && slot) {
-                await handleAddMeal(selectedSlotForDrawer.date, slot, dinerId, recipeId);
-            }
-            setSelectedSlotForDrawer(null);
-            setDrawerSelectedRecipe('');
-        }
         setIsAddRecipeModalOpen(false);
     };
 
@@ -296,20 +287,21 @@ export const PlannerPage = () => {
                     days={days}
                     plans={plans}
                     recipes={recipes}
+                    items={items}
+                    lists={lists}
                     activeConfigs={activeConfigs}
-                    onAddMeal={handleAddMeal}
+                    onAddEntry={handleAddEntry}
                     onDeleteMeal={handleDeleteMeal}
+                    onCreateRecipe={() => setIsAddRecipeModalOpen(true)}
                     onRequestPreviousWeek={() => navigateWeek('prev')}
                     onRequestNextWeek={() => navigateWeek('next')}
                     onJumpToToday={jumpToToday}
                     viewContainsToday={viewContainsToday}
-                    onRefreshRecipes={async () => { }}
                 />
             ) : (
                 <PlannerGrid
                     days={days}
                     plans={plans}
-                    recipes={recipes}
                     activeConfigs={activeConfigs}
                     onSelectSlot={(date, meal) => setSelectedSlotForDrawer({ date, meal })}
                     onDeleteMeal={handleDeleteMeal}
@@ -345,29 +337,18 @@ export const PlannerPage = () => {
 
                         {/* Drawer Content */}
                         <div className="p-6 flex-1 overflow-y-auto bg-base-50/30">
-                            <div className="bg-white p-5 rounded-2xl border border-base-200 shadow-sm space-y-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-ink-900 mb-2">Select Recipe</label>
-                                    <SearchableSelect
-                                        options={recipes}
-                                        value={drawerSelectedRecipe}
-                                        onChange={async (newVal) => {
-                                            if (!newVal) return;
-                                            setDrawerSelectedRecipe(newVal);
-                                            const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
-                                            await handleAddMeal(selectedSlotForDrawer.date, slot, dinerId, newVal);
-                                            setSelectedSlotForDrawer(null);
-                                            setDrawerSelectedRecipe('');
-                                        }}
-                                        getOptionValue={(r) => r.id}
-                                        getOptionLabel={(r) => r.grocery_list?.name || r.name}
-                                        placeholder="Search your library..."
-                                        searchPlaceholder="Search recipes..."
-                                        onAddNew={() => setIsAddRecipeModalOpen(true)}
-                                        addNewLabel="Create new recipe..."
-                                        autoFocus
-                                    />
-                                </div>
+                            <div className="bg-white p-5 rounded-2xl border border-base-200 shadow-sm">
+                                <PlanEntryForm
+                                    recipes={recipes}
+                                    items={items}
+                                    lists={lists}
+                                    onCreateRecipe={() => setIsAddRecipeModalOpen(true)}
+                                    onSubmit={async (draft) => {
+                                        const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
+                                        await handleAddEntry(selectedSlotForDrawer.date, slot, dinerId, draft);
+                                        setSelectedSlotForDrawer(null);
+                                    }}
+                                />
                             </div>
                         </div>
                     </div>

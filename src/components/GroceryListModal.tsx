@@ -3,9 +3,7 @@ import { X, Trash2, Loader2 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { AddGroceryModal } from './AddGroceryModal';
 import { GroceryListItems } from './grocery/GroceryListItems';
-import { GroceryListRecipe } from './grocery/GroceryListRecipe';
 
-import type { GroceryListWithRecipe } from '../services/groceryListService';
 import { pantryService } from '../services/pantryService';
 import { ResponsiveModal } from './ui/ResponsiveModal';
 
@@ -14,34 +12,27 @@ import {
     useAddGroceryItem,
     useUpdateGroceryItem,
     useDeleteGroceryItem,
-    useClearGroceryRecipe,
-    useAddRecipeToList,
-    useDeleteGroceryList
+    useDeleteGroceryList,
 } from '../hooks/queries/useGroceryList';
 
 interface GroceryListModalProps {
     isOpen: boolean;
     onClose: () => void;
     onUpdate: () => void;
-    groceryList: GroceryListWithRecipe | null;
+    list: { id: string; name: string } | null;
 }
 
-export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: GroceryListModalProps) {
-    const listId = groceryList?.id || null;
+export function GroceryListModal({ isOpen, onClose, onUpdate, list }: GroceryListModalProps) {
+    const listId = list?.id || null;
 
-    // Data Fetching
     const { data: details, isLoading } = useGroceryListDetails(isOpen ? listId : null);
     const { mutateAsync: addItem, isPending: isAddingItem } = useAddGroceryItem();
     const { mutateAsync: updateItem } = useUpdateGroceryItem();
     const { mutateAsync: deleteItem } = useDeleteGroceryItem();
-    const { mutateAsync: clearRecipe } = useClearGroceryRecipe();
-    const { mutateAsync: addRecipe, isPending: isSavingRecipe } = useAddRecipeToList();
     const { mutateAsync: deleteList, isPending: isDeleting } = useDeleteGroceryList();
 
-    const [groceries, setGroceries] = useState<any[]>([]);
+    const [groceries, setGroceries] = useState<{ id: string; name: string }[]>([]);
     const [isAddGroceryModalOpen, setIsAddGroceryModalOpen] = useState(false);
-
-    // Delete confirmation
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -64,45 +55,15 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
 
     const handleAddItem = async (groceryId: string, quantity: number, unit: string) => {
         if (!listId) return;
-        try {
-            await addItem({ listId, groceryTypeId: groceryId, quantity, unit });
-        } catch (e) {
-            throw e;
-        }
+        await addItem({ listId, groceryTypeId: groceryId, quantity, unit });
     };
 
     const handleUpdateItem = async (itemId: string, quantity: number, unit: string) => {
-        try {
-            await updateItem({ itemId, updates: { quantity, unit } });
-        } catch (e) {
-            throw e;
-        }
+        await updateItem({ itemId, updates: { quantity, unit } });
     };
 
     const handleDeleteItem = async (itemId: string) => {
-        try {
-            await deleteItem(itemId);
-        } catch (e) {
-            throw e;
-        }
-    };
-
-    const handleAddRecipe = async (name: string, servings: number) => {
-        if (!listId) return;
-        try {
-            await addRecipe({ listId, name, servings });
-        } catch (e) {
-            throw e;
-        }
-    };
-
-    const handleClearRecipe = async () => {
-        if (!details?.recipe) return;
-        try {
-            await clearRecipe(details.recipe.id);
-        } catch (e) {
-            throw e;
-        }
+        await deleteItem(itemId);
     };
 
     const handleDeleteList = async () => {
@@ -117,14 +78,14 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
         }
     };
 
-    if (!groceryList) return null;
+    if (!list) return null;
 
     return (
         <>
             <ResponsiveModal isOpen={isOpen} onClose={onClose} className="w-full sm:max-w-lg h-[90vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-base-300 bg-base-50 shrink-0">
-                    <h2 className="text-lg font-bold text-ink-900 truncate">{groceryList.name}</h2>
+                    <h2 className="text-lg font-bold text-ink-900 truncate">{list.name}</h2>
                     <button
                         onClick={onClose}
                         className="p-2 rounded-full hover:bg-base-200 text-ink-500 transition-colors"
@@ -148,24 +109,15 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
                             <Loader2 className="animate-spin text-accent" size={32} />
                         </div>
                     ) : (
-                        <>
-                            <GroceryListItems
-                                items={details?.list?.items as any || []}
-                                groceries={groceries}
-                                isAddingItem={isAddingItem}
-                                onAddItem={handleAddItem}
-                                onUpdateItem={handleUpdateItem}
-                                onDeleteItem={handleDeleteItem}
-                                onOpenAddGrocery={() => setIsAddGroceryModalOpen(true)}
-                            />
-
-                            <GroceryListRecipe
-                                recipe={details?.recipe as any}
-                                isSaving={isSavingRecipe}
-                                onAddRecipe={handleAddRecipe}
-                                onClearRecipe={handleClearRecipe}
-                            />
-                        </>
+                        <GroceryListItems
+                            items={(details?.list?.items as any) || []}
+                            groceries={groceries}
+                            isAddingItem={isAddingItem}
+                            onAddItem={handleAddItem}
+                            onUpdateItem={handleUpdateItem}
+                            onDeleteItem={handleDeleteItem}
+                            onOpenAddGrocery={() => setIsAddGroceryModalOpen(true)}
+                        />
                     )}
                 </div>
 
@@ -173,15 +125,8 @@ export function GroceryListModal({ isOpen, onClose, onUpdate, groceryList }: Gro
                 <div className="p-4 border-t border-base-300 bg-base-50 safe-area-bottom shrink-0">
                     {confirmDelete ? (
                         <div className="flex items-center gap-3">
-                            <span className="text-sm text-ink-600 flex-1">
-                                Delete this list and its recipe?
-                            </span>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setConfirmDelete(false)}
-                                disabled={isDeleting}
-                            >
+                            <span className="text-sm text-ink-600 flex-1">Delete this list?</span>
+                            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} disabled={isDeleting}>
                                 Cancel
                             </Button>
                             <Button

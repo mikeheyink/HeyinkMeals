@@ -6,8 +6,9 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { AddGroceryModal } from '../../components/AddGroceryModal';
-import { ArrowLeft, Save, Plus } from 'lucide-react';
+import { ArrowLeft, Save, Plus, X } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { toast } from 'sonner';
 
 export const RecipeEditor = () => {
     const { id } = useParams();
@@ -41,9 +42,7 @@ export const RecipeEditor = () => {
                     setName(r.name);
                     setServings(r.servings || 4);
                     setInstructions(r.instructions || '');
-                    if ((r.ingredients_list as any)?.items) {
-                        setIngredients((r.ingredients_list as any).items);
-                    }
+                    setIngredients((r as any).ingredients || []);
                 }
             }
         };
@@ -58,27 +57,45 @@ export const RecipeEditor = () => {
                 const r = await recipeService.createRecipe(name, instructions, servings);
                 navigate(`/recipes/${r.id}`);
             } else {
-                console.log('Update not yet implemented in service');
+                await recipeService.updateRecipe(id!, { name, instructions, servings });
+                toast.success('Recipe saved');
             }
         } catch (e) {
             console.error(e);
+            toast.error('Failed to save recipe');
         } finally {
             setLoading(false);
         }
     };
 
+    const reloadIngredients = async () => {
+        if (!id) return;
+        const r = await recipeService.getRecipe(id);
+        setIngredients((r as any).ingredients || []);
+    };
+
     const handleAddIngredient = async () => {
         if (!id || isNew) {
-            alert("Please save the recipe first before adding ingredients.");
+            toast.error('Please save the recipe first before adding ingredients.');
             return;
         }
 
         try {
             await recipeService.addIngredientToRecipe(id, selGrocery, qty, unit);
-            const r = await recipeService.getRecipe(id);
-            setIngredients((r.ingredients_list as any)?.items || []);
+            await reloadIngredients();
         } catch (e) {
             console.error(e);
+            toast.error('Failed to add ingredient');
+        }
+    };
+
+    const handleRemoveIngredient = async (ingredientId: string) => {
+        try {
+            await recipeService.removeIngredient(ingredientId);
+            await reloadIngredients();
+        } catch (e) {
+            console.error(e);
+            toast.error('Failed to remove ingredient');
         }
     };
 
@@ -167,11 +184,18 @@ export const RecipeEditor = () => {
 
                                 <div className="space-y-1">
                                     {ingredients.map((ing: any) => (
-                                        <div key={ing.id} className="flex justify-between items-center p-3 border-b border-base-300 last:border-0 hover:bg-base-100 transition-colors rounded-lg">
-                                            <span className="font-semibold text-ink-900">{ing.grocery_type.name}</span>
+                                        <div key={ing.id} className="flex justify-between items-center gap-3 p-3 border-b border-base-300 last:border-0 hover:bg-base-100 transition-colors rounded-lg">
+                                            <span className="font-semibold text-ink-900 flex-1 truncate">{ing.grocery_type?.name}</span>
                                             <span className="text-accent font-bold text-sm">
                                                 {ing.quantity} {ing.unit}
                                             </span>
+                                            <button
+                                                onClick={() => handleRemoveIngredient(ing.id)}
+                                                className="p-1.5 text-ink-400 hover:text-red-500 hover:bg-base-200 rounded-md transition-colors"
+                                                title="Remove ingredient"
+                                            >
+                                                <X size={16} />
+                                            </button>
                                         </div>
                                     ))}
                                     {ingredients.length === 0 && (

@@ -3,11 +3,11 @@ import { format, isToday, isSameDay } from 'date-fns';
 import { ChefHat, ChevronRight, ChevronLeft, BookOpen, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/Button';
+import { planEntryLabel, isCookable } from '../lib/planEntry';
 
 interface MobileCookingViewProps {
     days: Date[];
     plans: any[];
-    recipes: any[];
     activeConfigs: { id: string; slots: string[] }[];
     anchorDate: Date;
     selectedDate: Date;
@@ -20,7 +20,6 @@ interface MobileCookingViewProps {
 export const MobileCookingView = ({
     days,
     plans,
-    recipes,
     activeConfigs,
     selectedDate,
     onSelectDate,
@@ -57,17 +56,16 @@ export const MobileCookingView = ({
         const currentSlotIndex = currentHour < 10 ? 0 : currentHour < 14 ? 1 : 2;
 
         for (let i = currentSlotIndex; i < slotOrder.length; i++) {
-            const slotMeals: { plan: any; recipe: any; displayName: string; slot: string; diner: string; time: string }[] = [];
+            const slotMeals: { plan: any; displayName: string; slot: string; diner: string; time: string }[] = [];
             for (const config of activeConfigs) {
                 if (config.slots.includes(slotOrder[i])) {
                     const slotPlans = getPlansForSlot(today, slotOrder[i], config.id);
                     for (const plan of slotPlans) {
-                        const recipe = recipes.find(r => r.id === plan.reference_id);
-                        const displayName = recipe?.grocery_list?.name || recipe?.name || 'Unknown';
+                        // Only cookable (Recipe) entries belong in the "start cooking" hero.
+                        if (!isCookable(plan)) continue;
                         slotMeals.push({
                             plan,
-                            recipe,
-                            displayName,
+                            displayName: planEntryLabel(plan),
                             slot: slotOrder[i],
                             diner: config.id,
                             time: i === 0 ? '8:00 AM' : i === 1 ? '12:30 PM' : '6:30 PM'
@@ -90,9 +88,13 @@ export const MobileCookingView = ({
         config.slots.forEach(slot => {
             const slotPlans = getPlansForSlot(selectedDate, slot, config.id);
             for (const plan of slotPlans) {
-                const recipe = recipes.find(r => r.id === plan.reference_id);
-                const displayName = recipe?.grocery_list?.name || recipe?.name || 'Unknown';
-                dayPlans.push({ plan, recipe, displayName, slot, diner: config.id });
+                dayPlans.push({
+                    plan,
+                    displayName: planEntryLabel(plan),
+                    cookable: isCookable(plan),
+                    slot,
+                    diner: config.id,
+                });
             }
         });
     });
@@ -208,28 +210,40 @@ export const MobileCookingView = ({
                         {viewingToday ? 'Today' : format(selectedDate, 'EEEE')} — {format(selectedDate, 'MMM d')}
                     </h3>
                     <div className="space-y-2">
-                        {dayPlans.map(({ plan, displayName, slot, diner }) => (
-                            <button
-                                key={plan.id}
-                                onClick={() => navigate(`/cooking/${plan.id}`)}
-                                className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-base-300 shadow-sm hover:shadow-md active:bg-base-100 transition-all text-left"
-                            >
-                                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-base-200 flex items-center justify-center">
-                                    <BookOpen size={18} className="text-ink-500" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-bold text-ink-900 truncate">
-                                        {displayName}
-                                    </h4>
-                                    <div className="flex items-center gap-2 text-xs text-ink-500">
-                                        <span className="font-bold uppercase">{slot}</span>
-                                        <span className="text-ink-300">•</span>
-                                        <span>{diner}</span>
+                        {dayPlans.map(({ plan, displayName, cookable, slot, diner }) => {
+                            const content = (
+                                <>
+                                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-base-200 flex items-center justify-center">
+                                        <BookOpen size={18} className="text-ink-500" />
                                     </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-bold text-ink-900 truncate">{displayName}</h4>
+                                        <div className="flex items-center gap-2 text-xs text-ink-500">
+                                            <span className="font-bold uppercase">{slot}</span>
+                                            <span className="text-ink-300">•</span>
+                                            <span>{diner}</span>
+                                        </div>
+                                    </div>
+                                    {cookable && <ChevronRight size={18} className="text-ink-300 flex-shrink-0" />}
+                                </>
+                            );
+                            return cookable ? (
+                                <button
+                                    key={plan.id}
+                                    onClick={() => navigate(`/cooking/${plan.id}`)}
+                                    className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-base-300 shadow-sm hover:shadow-md active:bg-base-100 transition-all text-left"
+                                >
+                                    {content}
+                                </button>
+                            ) : (
+                                <div
+                                    key={plan.id}
+                                    className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-base-300 shadow-sm"
+                                >
+                                    {content}
                                 </div>
-                                <ChevronRight size={18} className="text-ink-300 flex-shrink-0" />
-                            </button>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             ) : !viewingToday && (
