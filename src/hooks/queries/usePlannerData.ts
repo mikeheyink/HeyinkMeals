@@ -89,6 +89,20 @@ export function useMutatePlannerAnchor() {
     });
 }
 
+export function useCreateGroceryItem() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (name: string) => pantryService.createGroceryType(name),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: plannerKeys.items() });
+        },
+        onError: (err) => {
+            console.error('Failed to create item:', err);
+            toast.error('Could not create that item. Please try again.');
+        },
+    });
+}
+
 export function useAddMealPlan() {
     const queryClient = useQueryClient();
     return useMutation({

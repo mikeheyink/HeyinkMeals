@@ -18,6 +18,7 @@ interface MobilePlannerViewProps {
     onAddEntry: (date: Date, slot: string, dinerId: string, draft: PlanEntryDraft) => Promise<void>;
     onDeleteMeal: (planId: string) => Promise<void>;
     onCreateRecipe?: () => void;
+    onCreateItem?: (name: string) => Promise<string | undefined>;
     onRequestPreviousWeek?: () => void;
     onRequestNextWeek?: () => void;
     onJumpToToday?: () => void;
@@ -34,6 +35,7 @@ export const MobilePlannerView = ({
     onAddEntry,
     onDeleteMeal,
     onCreateRecipe,
+    onCreateItem,
     onRequestPreviousWeek,
     onRequestNextWeek,
     onJumpToToday,
@@ -165,6 +167,7 @@ export const MobilePlannerView = ({
                                                 items={items}
                                                 lists={lists}
                                                 onCreateRecipe={onCreateRecipe}
+                                                onCreateItem={onCreateItem}
                                                 onSubmit={async (draft) => {
                                                     await onAddEntry(currentDay, slot, config.id, draft);
                                                     setAddingTo(null);

@@ -8,6 +8,8 @@ interface SearchableSelectProps<T> {
     onChange: (value: string) => void;
     getOptionValue: (option: T) => string;
     getOptionLabel: (option: T) => string;
+    /** Optional per-option adornments: a small right-aligned badge + a row tint. */
+    getOptionMeta?: (option: T) => { badge?: string; badgeClass?: string; rowClass?: string };
     placeholder?: string;
     searchPlaceholder?: string;
     disabled?: boolean;
@@ -15,6 +17,9 @@ interface SearchableSelectProps<T> {
     autoFocus?: boolean;
     onAddNew?: () => void;
     addNewLabel?: string;
+    /** When set, the footer becomes an "Add New" toggle that expands this menu. */
+    addNewMenu?: { label: string; onSelect: () => void }[];
+    addNewMenuLabel?: string;
     keepOpenOnSelect?: boolean;
 }
 
@@ -24,6 +29,7 @@ export function SearchableSelect<T>({
     onChange,
     getOptionValue,
     getOptionLabel,
+    getOptionMeta,
     placeholder = 'Select...',
     searchPlaceholder = 'Search...',
     disabled = false,
@@ -31,10 +37,13 @@ export function SearchableSelect<T>({
     autoFocus = false,
     onAddNew,
     addNewLabel = 'Add New',
+    addNewMenu,
+    addNewMenuLabel = 'Add New',
     keepOpenOnSelect = false
 }: SearchableSelectProps<T>) {
     const [isOpen, setIsOpen] = useState(autoFocus);
     const [search, setSearch] = useState('');
+    const [addMenuOpen, setAddMenuOpen] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(0);
     const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number; openUp: boolean; maxHeight: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -123,6 +132,11 @@ export function SearchableSelect<T>({
     useEffect(() => {
         setHighlightedIndex(0);
     }, [search, isOpen]);
+
+    // Collapse the "Add New" submenu whenever the dropdown closes
+    useEffect(() => {
+        if (!isOpen) setAddMenuOpen(false);
+    }, [isOpen]);
 
     // Scroll highlighted option into view
     useEffect(() => {
@@ -241,6 +255,7 @@ export function SearchableSelect<T>({
                                 const optLabel = getOptionLabel(option);
                                 const isSelected = optValue === value;
                                 const isHighlighted = index === highlightedIndex;
+                                const meta = getOptionMeta?.(option);
 
                                 return (
                                     <button
@@ -249,14 +264,17 @@ export function SearchableSelect<T>({
                                         type="button"
                                         onClick={() => handleSelect(option)}
                                         onMouseEnter={() => setHighlightedIndex(index)}
-                                        className={`w-full px-3 py-2.5 text-left text-sm transition-colors ${isSelected
-                                            ? 'bg-accent/10 text-accent font-medium'
-                                            : isHighlighted
-                                                ? 'bg-base-200 text-ink-900'
-                                                : 'text-ink-900 hover:bg-base-100'
-                                            }`}
+                                        className={`w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center justify-between gap-2 ${meta?.rowClass ?? ''} ${isSelected
+                                            ? 'text-accent font-semibold'
+                                            : 'text-ink-900'
+                                            } ${isHighlighted ? 'ring-1 ring-inset ring-accent/30' : ''} ${!meta?.rowClass && !isSelected && isHighlighted ? 'bg-base-200' : ''} ${!meta?.rowClass && !isSelected && !isHighlighted ? 'hover:bg-base-100' : ''}`}
                                     >
-                                        {optLabel}
+                                        <span className="truncate">{optLabel}</span>
+                                        {meta?.badge && (
+                                            <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide ${meta.badgeClass ?? 'text-ink-400'}`}>
+                                                {meta.badge}
+                                            </span>
+                                        )}
                                     </button>
                                 );
                             })
@@ -266,6 +284,44 @@ export function SearchableSelect<T>({
                             </div>
                         )}
                     </div>
+
+                    {/* Add New menu — expands to a category chooser */}
+                    {addNewMenu && addNewMenu.length > 0 && (
+                        <div className="border-t border-base-200 shrink-0">
+                            {addMenuOpen ? (
+                                <div className="py-1">
+                                    <div className="px-3 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-300">
+                                        Add new…
+                                    </div>
+                                    {addNewMenu.map(entry => (
+                                        <button
+                                            key={entry.label}
+                                            type="button"
+                                            onClick={() => {
+                                                setIsOpen(false);
+                                                setSearch('');
+                                                setAddMenuOpen(false);
+                                                entry.onSelect();
+                                            }}
+                                            className="w-full px-3 py-2.5 text-left text-sm font-medium text-ink-900 transition-colors flex items-center gap-2 hover:bg-accent/5"
+                                        >
+                                            <span className="text-accent">+</span>
+                                            {entry.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setAddMenuOpen(true)}
+                                    className="w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors flex items-center gap-2 hover:bg-accent/5"
+                                >
+                                    <span className="text-accent">+</span>
+                                    {addNewMenuLabel}
+                                </button>
+                            )}
+                        </div>
+                    )}
 
                     {/* Add New Button */}
                     {onAddNew && (
