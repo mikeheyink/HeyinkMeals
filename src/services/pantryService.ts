@@ -45,6 +45,21 @@ export const pantryService = {
         return data;
     },
 
+    /**
+     * Lightweight "create item" for the meal planner: just a name, no category
+     * or store (category_id is nullable). Returns the new row for immediate use.
+     */
+    async createGroceryType(name: string) {
+        const { data, error } = await supabase
+            .from('grocery_types')
+            .insert({ name })
+            .select('id, name')
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
     async addGrocery(name: string, categoryId: string, defaultStoreId?: string) {
         const { data, error } = await supabase
             .from('grocery_types')

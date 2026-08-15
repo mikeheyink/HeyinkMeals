@@ -20,6 +20,7 @@ import {
     useMutatePlannerConfig,
     useAddMealPlan,
     useDeleteMealPlan,
+    useCreateGroceryItem,
     plannerKeys
 } from '../../hooks/queries/usePlannerData';
 import { DEFAULT_PLANNER_CONFIG } from '../../services/preferencesService';
@@ -61,6 +62,12 @@ export const PlannerPage = () => {
     const { mutate: updateConfig } = useMutatePlannerConfig();
     const { mutateAsync: addMealPlan } = useAddMealPlan();
     const { mutateAsync: deleteMealPlan } = useDeleteMealPlan();
+    const { mutateAsync: createGroceryItem } = useCreateGroceryItem();
+
+    const handleCreateItem = async (name: string) => {
+        const row = await createGroceryItem(name);
+        return row?.id;
+    };
 
     // Navigation handlers
     const navigateWeek = (direction: 'prev' | 'next') => {
@@ -293,6 +300,7 @@ export const PlannerPage = () => {
                     onAddEntry={handleAddEntry}
                     onDeleteMeal={handleDeleteMeal}
                     onCreateRecipe={() => setIsAddRecipeModalOpen(true)}
+                    onCreateItem={handleCreateItem}
                     onRequestPreviousWeek={() => navigateWeek('prev')}
                     onRequestNextWeek={() => navigateWeek('next')}
                     onJumpToToday={jumpToToday}
@@ -343,6 +351,7 @@ export const PlannerPage = () => {
                                     items={items}
                                     lists={lists}
                                     onCreateRecipe={() => setIsAddRecipeModalOpen(true)}
+                                    onCreateItem={handleCreateItem}
                                     onSubmit={async (draft) => {
                                         const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
                                         await handleAddEntry(selectedSlotForDrawer.date, slot, dinerId, draft);
