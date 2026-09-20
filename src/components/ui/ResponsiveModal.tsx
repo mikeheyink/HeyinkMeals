@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface ResponsiveModalProps {
@@ -11,6 +11,7 @@ interface ResponsiveModalProps {
 
 export function ResponsiveModal({ isOpen, onClose, children, className = "w-full sm:w-[400px]" }: ResponsiveModalProps) {
     const modalRef = useRef<HTMLDivElement>(null);
+    const dragControls = useDragControls();
 
     useFocusTrap({ isOpen, onClose, containerRef: modalRef });
 
@@ -46,13 +47,23 @@ export function ResponsiveModal({ isOpen, onClose, children, className = "w-full
                         exit={{ y: "100%", transition: { duration: 0.2 } }}
                         transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                         drag="y"
+                        // Drag only starts from the grab handle. Listening on the whole
+                        // sheet would swallow vertical swipes meant for scrollable content.
+                        dragListener={false}
+                        dragControls={dragControls}
                         dragConstraints={{ top: 0, bottom: 0 }}
                         dragElastic={{ top: 0, bottom: 0.5 }}
                         onDragEnd={handleDragEnd}
+                        role="dialog"
+                        aria-modal="true"
                         className={`relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col overflow-hidden max-h-[90vh] ${className}`}
                     >
                         {/* Drag Handle for Mobile */}
-                        <div className="w-full flex justify-center pt-3 pb-2 sm:hidden touch-none" aria-hidden="true">
+                        <div
+                            className="w-full flex justify-center pt-3 pb-2 sm:hidden touch-none shrink-0 cursor-grab active:cursor-grabbing"
+                            aria-hidden="true"
+                            onPointerDown={(e) => dragControls.start(e)}
+                        >
                             <div className="w-12 h-1.5 bg-base-300 rounded-full" />
                         </div>
 
