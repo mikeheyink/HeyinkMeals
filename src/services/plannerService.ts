@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isUndefinedColumn } from '../lib/supabase';
 
 export type MealSlot = 'Breakfast' | 'Lunch' | 'Dinner';
 export type DinerType = 'Parents' | 'Children' | 'Everyone';
@@ -33,16 +33,35 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const plannerService = {
     /**
-     * Recipes available to schedule (non-archived), with base servings for scaling.
+     * Recipes available to schedule (non-archived), with base servings for scaling
+     * and the favourite flag the picker filters on.
      */
-    async getRecipesForPicker() {
+    async getRecipesForPicker(): Promise<{ id: string; name: string; servings: number | null; isFavourite: boolean }[]> {
         const { data, error } = await supabase
             .from('recipes')
-            .select('id, name, servings')
+            .select('id, name, servings, is_favourite')
             .eq('is_archived', false)
             .order('name');
+
+        // A database that hasn't had the favourites migration applied yet: retry
+        // without the column so the picker still loads, with nothing starred.
+        if (isUndefinedColumn(error)) {
+            const legacy = await supabase
+                .from('recipes')
+                .select('id, name, servings')
+                .eq('is_archived', false)
+                .order('name');
+            if (legacy.error) throw legacy.error;
+            return (legacy.data ?? []).map(r => ({ ...r, isFavourite: false }));
+        }
         if (error) throw error;
-        return data ?? [];
+
+        return (data ?? []).map(r => ({
+            id: r.id,
+            name: r.name,
+            servings: r.servings,
+            isFavourite: !!r.is_favourite,
+        }));
     },
 
     /**

@@ -10,3 +10,10 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+
+/**
+ * True when PostgREST rejected a query because a column doesn't exist yet.
+ * Lets a read fall back to the pre-migration shape instead of breaking the page
+ * on a database that hasn't had the latest `supabase/migrations/` SQL applied.
+ */
+export const isUndefinedColumn = (error: { code?: string } | null) => error?.code === '42703';

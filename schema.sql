@@ -64,7 +64,8 @@ create table recipes (
   total_time_mins int default 0,
   web_source text,
   category text,
-  is_archived boolean default false
+  is_archived boolean default false,
+  is_favourite boolean default false
 );
 
 create table recipe_ingredients (

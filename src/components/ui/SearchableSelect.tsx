@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search, X } from 'lucide-react';
 
@@ -10,6 +10,14 @@ interface SearchableSelectProps<T> {
     getOptionLabel: (option: T) => string;
     /** Optional per-option adornments: a small right-aligned badge + a row tint. */
     getOptionMeta?: (option: T) => { badge?: string; badgeClass?: string; rowClass?: string };
+    /** When set (with getOptionFilterKey), a row of toggleable category pills sits under the search box. */
+    filters?: { key: string; label: string; activeClass?: string }[];
+    getOptionFilterKey?: (option: T) => string;
+    /**
+     * Standalone switches (e.g. "Favourites") shown next to the category pills.
+     * Each narrows the list further — ANDed with the pills and with each other.
+     */
+    toggles?: { key: string; label: string; icon?: React.ElementType; activeClass?: string; match: (option: T) => boolean }[];
     placeholder?: string;
     searchPlaceholder?: string;
     disabled?: boolean;
@@ -30,6 +38,9 @@ export function SearchableSelect<T>({
     getOptionValue,
     getOptionLabel,
     getOptionMeta,
+    filters,
+    getOptionFilterKey,
+    toggles,
     placeholder = 'Select...',
     searchPlaceholder = 'Search...',
     disabled = false,
@@ -44,6 +55,9 @@ export function SearchableSelect<T>({
     const [isOpen, setIsOpen] = useState(autoFocus);
     const [search, setSearch] = useState('');
     const [addMenuOpen, setAddMenuOpen] = useState(false);
+    // Empty set = no filter applied (show everything).
+    const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+    const [activeToggles, setActiveToggles] = useState<Set<string>>(new Set());
     const [highlightedIndex, setHighlightedIndex] = useState(0);
     const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number; openUp: boolean; maxHeight: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -56,13 +70,41 @@ export function SearchableSelect<T>({
     const selectedOption = options.find(opt => getOptionValue(opt) === value);
     const selectedLabel = selectedOption ? getOptionLabel(selectedOption) : '';
 
+    // Options matching the active category pills (before the text search narrows further)
+    const categoryMatchedOptions = activeFilters.size > 0 && getOptionFilterKey
+        ? options.filter(opt => activeFilters.has(getOptionFilterKey(opt)))
+        : options;
+
+    // Active toggles narrow further: every one of them must match.
+    const toggleMatchedOptions = activeToggles.size > 0 && toggles
+        ? categoryMatchedOptions.filter(opt => toggles.every(t => !activeToggles.has(t.key) || t.match(opt)))
+        : categoryMatchedOptions;
+
     // Sort options alphabetically and filter by search
-    const sortedAndFilteredOptions = options
+    const sortedAndFilteredOptions = toggleMatchedOptions
         .slice()
         .sort((a, b) => getOptionLabel(a).localeCompare(getOptionLabel(b), undefined, { sensitivity: 'base' }))
         .filter(opt =>
             getOptionLabel(opt).toLowerCase().includes(search.toLowerCase())
         );
+
+    // Per-filter counts, computed against the text search only so the numbers
+    // stay stable as pills are toggled on and off.
+    const searchMatchedOptions = options.filter(opt =>
+        getOptionLabel(opt).toLowerCase().includes(search.toLowerCase())
+    );
+    const filterCount = (key: string) =>
+        getOptionFilterKey ? searchMatchedOptions.filter(o => getOptionFilterKey(o) === key).length : 0;
+    const toggleCount = (match: (option: T) => boolean) => searchMatchedOptions.filter(match).length;
+
+    const flip = (set: Set<string>, key: string) => {
+        const next = new Set(set);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+    };
+    const toggleFilter = (key: string) => setActiveFilters(prev => flip(prev, key));
+    const toggleToggle = (key: string) => setActiveToggles(prev => flip(prev, key));
+    const hasNarrowing = activeFilters.size > 0 || activeToggles.size > 0;
 
     // Total navigable items (options + "Add New" if present)
     const totalItems = sortedAndFilteredOptions.length + (onAddNew ? 1 : 0);
@@ -85,22 +127,33 @@ export function SearchableSelect<T>({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isOpen]);
 
-    // Compute portal dropdown position based on trigger button's viewport rect.
-    // Recomputes on open, scroll, and resize so the dropdown stays anchored.
+    // Compute portal dropdown position based on the trigger button's viewport rect.
+    // The trigger often lives inside an animated ancestor (the modal sheet springs
+    // up on open, and can be dragged), so a one-shot measurement would leave the
+    // dropdown stranded where the trigger *used* to be. Track the rect on every
+    // frame while open and only commit state when it actually moves.
     useLayoutEffect(() => {
         if (!isOpen) {
             setDropdownRect(null);
             return;
         }
 
+        let frame = 0;
+        let lastKey = '';
+
         const compute = () => {
             const btn = triggerButtonRef.current;
             if (!btn) return;
             const rect = btn.getBoundingClientRect();
+            const key = `${rect.top}|${rect.bottom}|${rect.left}|${rect.width}|${window.innerHeight}`;
+            if (key === lastKey) return;
+            lastKey = key;
+
             const spaceBelow = window.innerHeight - rect.bottom - 8;
             const spaceAbove = rect.top - 8;
-            const preferUp = spaceBelow < 240 && spaceAbove > spaceBelow;
-            const maxHeight = Math.max(180, Math.min(420, preferUp ? spaceAbove : spaceBelow));
+            const preferUp = spaceBelow < 260 && spaceAbove > spaceBelow;
+            const available = preferUp ? spaceAbove : spaceBelow;
+            const maxHeight = Math.max(200, Math.min(420, available));
             setDropdownRect({
                 top: preferUp ? rect.top - 4 : rect.bottom + 4,
                 left: rect.left,
@@ -110,13 +163,13 @@ export function SearchableSelect<T>({
             });
         };
 
-        compute();
-        window.addEventListener('scroll', compute, true);
-        window.addEventListener('resize', compute);
-        return () => {
-            window.removeEventListener('scroll', compute, true);
-            window.removeEventListener('resize', compute);
+        const tick = () => {
+            compute();
+            frame = requestAnimationFrame(tick);
         };
+        tick();
+
+        return () => cancelAnimationFrame(frame);
     }, [isOpen]);
 
     // Focus search input once the portal dropdown has mounted.
@@ -131,11 +184,15 @@ export function SearchableSelect<T>({
     // Reset highlighted index when search changes or dropdown opens
     useEffect(() => {
         setHighlightedIndex(0);
-    }, [search, isOpen]);
+    }, [search, isOpen, activeFilters, activeToggles]);
 
-    // Collapse the "Add New" submenu whenever the dropdown closes
+    // Collapse the "Add New" submenu and clear category pills whenever the dropdown closes
     useEffect(() => {
-        if (!isOpen) setAddMenuOpen(false);
+        if (!isOpen) {
+            setAddMenuOpen(false);
+            setActiveFilters(new Set());
+            setActiveToggles(new Set());
+        }
     }, [isOpen]);
 
     // Scroll highlighted option into view
@@ -246,6 +303,69 @@ export function SearchableSelect<T>({
                             )}
                         </div>
                     </div>
+
+                    {/* Category filter pills + standalone toggles */}
+                    {((filters && filters.length > 0 && getOptionFilterKey) || (toggles && toggles.length > 0)) && (
+                        <div className="px-2 pb-2 pt-0.5 border-b border-base-200 shrink-0 flex flex-wrap gap-1.5">
+                            {getOptionFilterKey && filters?.map(f => {
+                                const isActive = activeFilters.has(f.key);
+                                const count = filterCount(f.key);
+                                return (
+                                    <button
+                                        key={f.key}
+                                        type="button"
+                                        onClick={() => {
+                                            toggleFilter(f.key);
+                                            // Keep typing possible straight after toggling
+                                            searchInputRef.current?.focus();
+                                        }}
+                                        className={`px-2 py-1 rounded-full text-[11px] font-semibold transition-colors border ${isActive
+                                            ? (f.activeClass ?? 'bg-accent text-white border-accent')
+                                            : 'bg-white text-ink-500 border-base-300 hover:bg-base-100'
+                                            }`}
+                                    >
+                                        {f.label}
+                                        <span className={`ml-1 font-normal ${isActive ? 'opacity-80' : 'text-ink-300'}`}>{count}</span>
+                                    </button>
+                                );
+                            })}
+                            {toggles?.map(t => {
+                                const isActive = activeToggles.has(t.key);
+                                const Icon = t.icon;
+                                return (
+                                    <button
+                                        key={t.key}
+                                        type="button"
+                                        onClick={() => {
+                                            toggleToggle(t.key);
+                                            searchInputRef.current?.focus();
+                                        }}
+                                        className={`px-2 py-1 rounded-full text-[11px] font-semibold transition-colors border inline-flex items-center gap-1 ${isActive
+                                            ? (t.activeClass ?? 'bg-accent text-white border-accent')
+                                            : 'bg-white text-ink-500 border-base-300 hover:bg-base-100'
+                                            }`}
+                                    >
+                                        {Icon && <Icon size={11} className={isActive ? 'fill-current' : ''} />}
+                                        {t.label}
+                                        <span className={`font-normal ${isActive ? 'opacity-80' : 'text-ink-300'}`}>{toggleCount(t.match)}</span>
+                                    </button>
+                                );
+                            })}
+                            {hasNarrowing && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveFilters(new Set());
+                                        setActiveToggles(new Set());
+                                        searchInputRef.current?.focus();
+                                    }}
+                                    className="px-2 py-1 rounded-full text-[11px] font-medium text-ink-400 hover:text-ink-900 hover:bg-base-100 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                    )}
 
                     {/* Options List */}
                     <div className="flex-1 overflow-y-auto">

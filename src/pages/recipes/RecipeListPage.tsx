@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { recipeService } from '../../services/recipeService';
 import type { RecipeSummary } from '../../services/recipeService';
 import { Button } from '../../components/ui/Button';
-import { Plus, BookOpen, Package, Search, ChevronDown, ChevronRight, CheckSquare, Square, X } from 'lucide-react';
+import { Plus, BookOpen, Package, Search, ChevronDown, ChevronRight, CheckSquare, Square, Star, X } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { toast } from 'sonner';
@@ -22,6 +22,7 @@ export const RecipeListPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(RECIPE_CATEGORIES.map(c => c.key)));
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [favouritesOnly, setFavouritesOnly] = useState(false);
     const [bulkCategory, setBulkCategory] = useState(RECIPE_CATEGORIES[0].key);
 
     useEffect(() => {
@@ -59,6 +60,37 @@ export const RecipeListPage = () => {
         }
     };
 
+    const toggleFavourite = async (recipe: RecipeSummary) => {
+        const next = !recipe.isFavourite;
+        // Optimistic: the star should feel instant, and we roll back on failure.
+        setRecipes(prev => prev.map(r => (r.id === recipe.id ? { ...r, isFavourite: next } : r)));
+        try {
+            await recipeService.setRecipeFavourite(recipe.id, next);
+        } catch (e) {
+            console.error('Failed to update favourite:', e);
+            setRecipes(prev => prev.map(r => (r.id === recipe.id ? { ...r, isFavourite: !next } : r)));
+            toast.error('Failed to update favourite');
+        }
+    };
+
+    const renderStar = (recipe: RecipeSummary, size: number) => (
+        <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleFavourite(recipe); }}
+            title={recipe.isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+            aria-label={recipe.isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+            aria-pressed={recipe.isFavourite}
+            className="flex-shrink-0 p-0.5"
+        >
+            <Star
+                size={size}
+                className={recipe.isFavourite
+                    ? 'text-amber-500 fill-amber-500'
+                    : 'text-ink-300 hover:text-amber-500 transition-colors'}
+            />
+        </button>
+    );
+
     const toggleSelect = (id: string) => {
         setSelectedIds(prev => {
             const next = new Set(prev);
@@ -83,7 +115,11 @@ export const RecipeListPage = () => {
         }
     };
 
-    const filtered = recipes.filter(r => !searchQuery || r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filtered = recipes.filter(r =>
+        (!searchQuery || r.name.toLowerCase().includes(searchQuery.toLowerCase())) &&
+        (!favouritesOnly || r.isFavourite)
+    );
+    const favouriteCount = recipes.filter(r => r.isFavourite).length;
 
     const grouped: Record<string, RecipeSummary[]> = {};
     RECIPE_CATEGORIES.forEach(cat => { grouped[cat.key] = []; });
@@ -107,6 +143,9 @@ export const RecipeListPage = () => {
                             ? <CheckSquare size={18} className="text-accent" />
                             : <Square size={18} className="text-ink-300 hover:text-ink-500 transition-colors" />}
                     </div>
+                </td>
+                <td className="zen-table-cell w-8 pr-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-center">{renderStar(recipe, 18)}</div>
                 </td>
                 <td className="zen-table-cell">
                     <div className="flex items-center gap-3">
@@ -149,6 +188,7 @@ export const RecipeListPage = () => {
                                 ? <CheckSquare size={20} className="text-accent" />
                                 : <Square size={20} className="text-ink-300" />}
                         </button>
+                        {renderStar(recipe, 20)}
                         <div className="flex items-center gap-2" onClick={() => navigate(`/recipes/${recipe.id}`)}>
                             <div className="p-1.5 bg-base-200 rounded text-ink-500">
                                 <BookOpen size={16} />
@@ -191,6 +231,14 @@ export const RecipeListPage = () => {
                                 className="zen-input pl-9 w-full md:w-64"
                             />
                         </div>
+                        <Button
+                            onClick={() => setFavouritesOnly(v => !v)}
+                            icon={Star}
+                            variant={favouritesOnly ? 'primary' : 'outline'}
+                            aria-pressed={favouritesOnly}
+                        >
+                            Favourites <span className="font-normal opacity-70">{favouriteCount}</span>
+                        </Button>
                         <Button onClick={() => navigate('/recipes/new')} icon={Plus} variant="primary">
                             New Recipe
                         </Button>
@@ -208,6 +256,14 @@ export const RecipeListPage = () => {
                     <h3 className="text-lg font-semibold text-ink-700 mb-2">No recipes yet</h3>
                     <p className="text-ink-400 mb-4">Create a recipe to start planning meals.</p>
                     <Button icon={Plus} onClick={() => navigate('/recipes/new')}>Create First Recipe</Button>
+                </Card>
+            ) : filtered.length === 0 ? (
+                <Card className="p-8 text-center">
+                    <Star className="mx-auto mb-4 text-ink-300" size={48} />
+                    <h3 className="text-lg font-semibold text-ink-700 mb-2">No matching recipes</h3>
+                    <p className="text-ink-400">
+                        {favouritesOnly ? 'Star a recipe to see it here.' : 'Try a different search.'}
+                    </p>
                 </Card>
             ) : (
                 RECIPE_CATEGORIES.map(cat => {
@@ -233,6 +289,7 @@ export const RecipeListPage = () => {
                                             <thead className="zen-table-header">
                                                 <tr>
                                                     <th className="zen-table-cell w-10 pl-4"></th>
+                                                    <th className="zen-table-cell w-8 pr-0"></th>
                                                     <th className="zen-table-cell w-1/2">Recipe</th>
                                                     <th className="zen-table-cell">Ingredients</th>
                                                     <th className="zen-table-cell">Category</th>
