@@ -64,6 +64,9 @@ categories, and enables RLS. You're done — skip to step 4.
 3. `20260613_cleanup.sql` — **destructive; run only after** you've confirmed the redesigned app works
    end-to-end. Drops the legacy `plan_type` / `reference_id` / `ingredients_list_id` columns and adds
    the typed-entry constraints.
+4. `20260920_add_recipe_favourites.sql` — **additive**: adds `recipes.is_favourite` for the star
+   toggle in the recipe library and the "Favourites" filter in the planner's picker. Until it's
+   applied the app still loads; nothing is starred and starring fails with a toast.
 
 `supabase/migrations/20260118_add_vector_embeddings.sql` exists but is **not used by the app** yet (see
 [Known limitations](#known-limitations--architectural-notes)).

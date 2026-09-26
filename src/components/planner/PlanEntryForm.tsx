@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Star } from 'lucide-react';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { Button } from '../ui/Button';
 import type { PlanEntryDraft, EntryType } from '../../services/plannerService';
@@ -17,11 +17,28 @@ const CATEGORY_META: Record<EntryType, { badge: string; badgeClass: string; rowC
     Note: { badge: 'Note', badgeClass: 'text-amber-600', rowClass: 'bg-amber-50 hover:bg-amber-100' },
 };
 
-interface RecipeOption { id: string; name: string; servings?: number | null }
+// Pills that narrow the unified dropdown to one or more categories.
+const CATEGORY_FILTERS: { key: EntryType; label: string; activeClass: string }[] = [
+    { key: 'Recipe', label: 'Recipes', activeClass: 'bg-blue-600 text-white border-blue-600' },
+    { key: 'Item', label: 'Items', activeClass: 'bg-emerald-600 text-white border-emerald-600' },
+    { key: 'List', label: 'Lists', activeClass: 'bg-violet-600 text-white border-violet-600' },
+    { key: 'Note', label: 'Notes', activeClass: 'bg-amber-600 text-white border-amber-600' },
+];
+
+// Narrows the dropdown to starred recipes. ANDed with the category pills above.
+const FAVOURITE_TOGGLE = [{
+    key: 'favourite',
+    label: 'Favourites',
+    icon: Star,
+    activeClass: 'bg-amber-500 text-white border-amber-500',
+    match: (o: UnifiedOption) => !!o.isFavourite,
+}];
+
+interface RecipeOption { id: string; name: string; servings?: number | null; isFavourite?: boolean }
 interface NamedOption { id: string; name: string }
 
 /** A single row in the unified picker. `value` encodes its category + id. */
-interface UnifiedOption { value: string; label: string; kind: EntryType }
+interface UnifiedOption { value: string; label: string; kind: EntryType; isFavourite?: boolean }
 
 interface PlanEntryFormProps {
     recipes: RecipeOption[];
@@ -53,7 +70,7 @@ export function PlanEntryForm({ recipes, items, lists, onSubmit, onCreateRecipe,
     const [customNote, setCustomNote] = useState('');
 
     const options: UnifiedOption[] = [
-        ...recipes.map(r => ({ value: `Recipe:${r.id}`, label: r.name, kind: 'Recipe' as const })),
+        ...recipes.map(r => ({ value: `Recipe:${r.id}`, label: r.name, kind: 'Recipe' as const, isFavourite: r.isFavourite })),
         ...items.map(i => ({ value: `Item:${i.id}`, label: i.name, kind: 'Item' as const })),
         ...lists.map(l => ({ value: `List:${l.id}`, label: l.name, kind: 'List' as const })),
         ...NOTE_PRESETS.map(p => ({ value: `Note:${p}`, label: p, kind: 'Note' as const })),
@@ -121,7 +138,12 @@ export function PlanEntryForm({ recipes, items, lists, onSubmit, onCreateRecipe,
                 onChange={handleChange}
                 getOptionValue={(o) => o.value}
                 getOptionLabel={(o) => o.label}
-                getOptionMeta={(o) => CATEGORY_META[o.kind]}
+                getOptionMeta={(o) => o.isFavourite
+                    ? { ...CATEGORY_META[o.kind], badge: `★ ${CATEGORY_META[o.kind].badge}` }
+                    : CATEGORY_META[o.kind]}
+                filters={CATEGORY_FILTERS}
+                getOptionFilterKey={(o) => o.kind}
+                toggles={FAVOURITE_TOGGLE}
                 placeholder="Search recipes, items, lists…"
                 searchPlaceholder="Search…"
                 addNewMenu={addNewMenu}

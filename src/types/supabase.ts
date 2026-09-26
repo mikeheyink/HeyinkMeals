@@ -266,6 +266,7 @@ export type Database = {
           ingredients_list_id: string | null
           instructions: string | null
           is_archived: boolean | null
+          is_favourite: boolean | null
           name: string
           category: string | null
           prep_time_minutes: number | null
@@ -280,6 +281,7 @@ export type Database = {
           ingredients_list_id?: string | null
           instructions?: string | null
           is_archived?: boolean | null
+          is_favourite?: boolean | null
           name: string
           category?: string | null
           prep_time_minutes?: number | null
@@ -294,6 +296,7 @@ export type Database = {
           ingredients_list_id?: string | null
           instructions?: string | null
           is_archived?: boolean | null
+          is_favourite?: boolean | null
           name?: string
           category?: string | null
           prep_time_minutes?: number | null

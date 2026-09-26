@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isUndefinedColumn } from '../lib/supabase';
 import type { Database } from '../types/supabase';
 
 type Recipe = Database['public']['Tables']['recipes']['Row'];
@@ -10,8 +10,34 @@ export interface RecipeSummary {
     servings: number | null;
     total_time_mins: number | null;
     web_source: string | null;
+    isFavourite: boolean;
     itemCount: number;
 }
+
+/** The shape both library queries below return, before it becomes a RecipeSummary. */
+interface RecipeSummaryRow {
+    id: string;
+    name: string;
+    category: string | null;
+    servings: number | null;
+    total_time_mins: number | null;
+    web_source: string | null;
+    ingredients: unknown;
+}
+
+const toSummary = (row: RecipeSummaryRow, isFavourite: boolean): RecipeSummary => {
+    const counts = row.ingredients as { count: number }[];
+    return {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        servings: row.servings,
+        total_time_mins: row.total_time_mins,
+        web_source: row.web_source,
+        isFavourite,
+        itemCount: counts?.[0]?.count ?? 0,
+    };
+};
 
 export const recipeService = {
     /**
@@ -21,25 +47,29 @@ export const recipeService = {
         const { data, error } = await supabase
             .from('recipes')
             .select(`
-                id, name, category, servings, total_time_mins, web_source,
+                id, name, category, servings, total_time_mins, web_source, is_favourite,
                 ingredients:recipe_ingredients(count)
             `)
             .eq('is_archived', false)
             .order('name');
+
+        // A database that hasn't had the favourites migration applied yet: retry
+        // without the column so the library still loads, with nothing starred.
+        if (isUndefinedColumn(error)) {
+            const legacy = await supabase
+                .from('recipes')
+                .select(`
+                    id, name, category, servings, total_time_mins, web_source,
+                    ingredients:recipe_ingredients(count)
+                `)
+                .eq('is_archived', false)
+                .order('name');
+            if (legacy.error) throw legacy.error;
+            return (legacy.data ?? []).map(r => toSummary(r, false));
+        }
         if (error) throw error;
 
-        return (data ?? []).map(r => {
-            const counts = r.ingredients as unknown as { count: number }[];
-            return {
-                id: r.id,
-                name: r.name,
-                category: r.category,
-                servings: r.servings,
-                total_time_mins: r.total_time_mins,
-                web_source: r.web_source,
-                itemCount: counts?.[0]?.count ?? 0,
-            };
-        });
+        return (data ?? []).map(r => toSummary(r, !!r.is_favourite));
     },
 
     async createRecipe(name: string, instructions: string, servings: number) {
@@ -57,6 +87,15 @@ export const recipeService = {
         updates: Partial<Pick<Recipe, 'name' | 'instructions' | 'servings' | 'web_source' | 'category'>>
     ) {
         const { error } = await supabase.from('recipes').update(updates).eq('id', recipeId);
+        if (error) throw error;
+    },
+
+    /**
+     * Star or un-star a recipe. Favourites are household-wide (matching the rest of
+     * the data model) and drive the "Favourites" filters in the library and planner.
+     */
+    async setRecipeFavourite(recipeId: string, isFavourite: boolean) {
+        const { error } = await supabase.from('recipes').update({ is_favourite: isFavourite }).eq('id', recipeId);
         if (error) throw error;
     },
 
