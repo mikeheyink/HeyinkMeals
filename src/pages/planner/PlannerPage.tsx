@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { format, addDays, startOfDay, isToday } from 'date-fns';
 import { ChevronUp, ChevronDown, Settings, ChevronLeft, ChevronRight, X } from 'lucide-react';
@@ -10,6 +10,9 @@ import { AddRecipeModal } from '../../components/AddRecipeModal';
 import { PlannerGrid } from '../../components/planner/PlannerGrid';
 import { PlanEntryForm } from '../../components/planner/PlanEntryForm';
 import { useIsMobile } from '../../hooks/useMediaQuery';
+
+/** What the "new recipe" flow hands back; undefined when the user cancelled. */
+type CreatedRecipe = { id: string; servings?: number | null } | undefined;
 
 import {
     usePlannerConfig,
@@ -118,11 +121,34 @@ export const PlannerPage = () => {
         await deleteMealPlan(planId);
     };
 
-    const handleRecipeCreated = async () => {
-        // Refresh the picker so the newly created recipe is selectable, then let the
-        // user pick it from the form (drawer / mobile editor stays open).
-        await queryClient.invalidateQueries({ queryKey: plannerKeys.recipes() });
+    // Bridges the modal back to whichever PlanEntryForm opened it, so a recipe
+    // created from a meal slot lands in that slot instead of only in the database.
+    const recipeResolver = useRef<((created: CreatedRecipe) => void) | null>(null);
+
+    const openAddRecipe = () =>
+        new Promise<CreatedRecipe>(resolve => {
+            recipeResolver.current = resolve;
+            setIsAddRecipeModalOpen(true);
+        });
+
+    const handleRecipeCreated = async (recipeId: string, servings?: number) => {
+        // Claim the resolver synchronously. AddRecipeModal calls onClose() straight
+        // after this, and awaiting first would let the close path settle it as a
+        // cancellation before we get here.
+        const resolve = recipeResolver.current;
+        recipeResolver.current = null;
         setIsAddRecipeModalOpen(false);
+
+        // Resolve only once the picker has the new recipe, so the form can show its
+        // name rather than falling back to the placeholder until the refetch lands.
+        await queryClient.invalidateQueries({ queryKey: plannerKeys.recipes() });
+        resolve?.({ id: recipeId, servings });
+    };
+
+    const handleAddRecipeClosed = () => {
+        setIsAddRecipeModalOpen(false);
+        recipeResolver.current?.(undefined);
+        recipeResolver.current = null;
     };
 
     return (
@@ -299,7 +325,7 @@ export const PlannerPage = () => {
                     activeConfigs={activeConfigs}
                     onAddEntry={handleAddEntry}
                     onDeleteMeal={handleDeleteMeal}
-                    onCreateRecipe={() => setIsAddRecipeModalOpen(true)}
+                    onCreateRecipe={openAddRecipe}
                     onCreateItem={handleCreateItem}
                     onRequestPreviousWeek={() => navigateWeek('prev')}
                     onRequestNextWeek={() => navigateWeek('next')}
@@ -350,7 +376,7 @@ export const PlannerPage = () => {
                                     recipes={recipes}
                                     items={items}
                                     lists={lists}
-                                    onCreateRecipe={() => setIsAddRecipeModalOpen(true)}
+                                    onCreateRecipe={openAddRecipe}
                                     onCreateItem={handleCreateItem}
                                     onSubmit={async (draft) => {
                                         const [dinerId, slot] = selectedSlotForDrawer.meal.split('-');
@@ -366,9 +392,7 @@ export const PlannerPage = () => {
 
             <AddRecipeModal
                 isOpen={isAddRecipeModalOpen}
-                onClose={() => {
-                    setIsAddRecipeModalOpen(false);
-                }}
+                onClose={handleAddRecipeClosed}
                 onRecipeCreated={handleRecipeCreated}
             />
         </div>

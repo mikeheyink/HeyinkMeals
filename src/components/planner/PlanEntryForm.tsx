@@ -45,7 +45,8 @@ interface PlanEntryFormProps {
     items: NamedOption[];
     lists: NamedOption[];
     onSubmit: (draft: PlanEntryDraft) => void | Promise<void>;
-    onCreateRecipe?: () => void;
+    /** Opens the "new recipe" flow; resolves to the created recipe, or undefined if cancelled. */
+    onCreateRecipe?: () => Promise<{ id: string; servings?: number | null } | undefined>;
     /** Create a bare grocery item (name only); resolves to the new item's id. */
     onCreateItem?: (name: string) => Promise<string | undefined>;
     submitting?: boolean;
@@ -110,8 +111,18 @@ export function PlanEntryForm({ recipes, items, lists, onSubmit, onCreateRecipe,
         }
     };
 
+    // Mirrors handleCreateItem: whatever you just created becomes the slot's
+    // selection, so you never have to go hunting for it in the picker.
+    const handleCreateRecipe = async () => {
+        const created = await onCreateRecipe?.();
+        if (!created) return;
+        setAddMode('none');
+        setSelected(`Recipe:${created.id}`);
+        if (created.servings) setServings(created.servings);
+    };
+
     const addNewMenu = [
-        ...(onCreateRecipe ? [{ label: 'Recipe', onSelect: onCreateRecipe }] : []),
+        ...(onCreateRecipe ? [{ label: 'Recipe', onSelect: handleCreateRecipe }] : []),
         ...(onCreateItem ? [{ label: 'Item', onSelect: startAddItem }] : []),
         { label: 'Note', onSelect: startAddNote },
     ];
