@@ -10,7 +10,7 @@ import { ResponsiveModal } from './ui/ResponsiveModal';
 interface AddRecipeModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onRecipeCreated: (recipeId: string) => void;
+    onRecipeCreated: (recipeId: string, servings?: number) => void;
 }
 
 export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeModalProps) => {
@@ -67,7 +67,7 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
                 ));
             }
 
-            onRecipeCreated(recipe.id);
+            onRecipeCreated(recipe.id, servings);
             onClose();
         } catch (e) {
             console.error('Failed to create recipe:', e);
@@ -77,11 +77,16 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
         }
     };
 
-    const addIngredient = (groceryId: string) => {
-        const grocery = availableGroceries.find(g => g.id === groceryId);
+    /**
+     * `known` lets a caller pass the grocery it just created. State updates are
+     * queued, so a grocery added in this same tick is not yet in
+     * `availableGroceries` and looking it up there would silently no-op.
+     */
+    const addIngredient = (groceryId: string, known?: { id: string; name: string }) => {
+        const grocery = known ?? availableGroceries.find(g => g.id === groceryId);
         if (!grocery) return;
 
-        if (ingredients.some(i => i.id === groceryId)) {
+        if (ingredients.some(i => i.id === grocery.id)) {
             return;
         }
 
@@ -243,7 +248,7 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
                 onClose={() => setIsAddGroceryModalOpen(false)}
                 onItemAdded={(item) => {
                     setAvailableGroceries(prev => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
-                    addIngredient(item.id);
+                    addIngredient(item.id, item);
                     setIsAddGroceryModalOpen(false);
                 }}
             />

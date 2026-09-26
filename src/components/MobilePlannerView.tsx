@@ -17,7 +17,7 @@ interface MobilePlannerViewProps {
     activeConfigs: { id: string; slots: string[] }[];
     onAddEntry: (date: Date, slot: string, dinerId: string, draft: PlanEntryDraft) => Promise<void>;
     onDeleteMeal: (planId: string) => Promise<void>;
-    onCreateRecipe?: () => void;
+    onCreateRecipe?: () => Promise<{ id: string; servings?: number | null } | undefined>;
     onCreateItem?: (name: string) => Promise<string | undefined>;
     onRequestPreviousWeek?: () => void;
     onRequestNextWeek?: () => void;
