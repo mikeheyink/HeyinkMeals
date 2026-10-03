@@ -1,249 +1,187 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChefHat, Timer } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { recipeService } from '../../services/recipeService';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { ChevronLeft, Timer, ChefHat, CheckCircle2, Play, Pause, RotateCcw, List, BookOpen } from 'lucide-react';
-import { PageHeader } from '../../components/ui/PageHeader';
 import { useIsMobile } from '../../hooks/useMediaQuery';
+import { useCountdown } from '../../hooks/useCountdown';
+import { cookingSteps } from '../../lib/recipeSteps';
+import { servingsFactor } from '../../lib/cooking';
+import type { CookIngredient } from '../../lib/cooking';
+import { RecipeThumb } from '../../components/recipes/RecipeThumb';
+import { SourceLink } from '../../components/recipes/SourceLink';
+import { IngredientChecklist } from '../../components/cooking/IngredientChecklist';
+import { StepCards } from '../../components/cooking/StepCards';
+import { CookTimer } from '../../components/cooking/CookTimer';
 
+type Recipe = Awaited<ReturnType<typeof recipeService.getRecipe>>;
+type Phase = 'ready' | 'cook';
+
+const TIMER_PRESETS = [1, 5, 10, 15, 20, 30];
+
+/**
+ * Distraction-free cooking: first get everything out (a checklist grouped by kitchen zone), then
+ * cook one step card at a time — each card shows only the ingredients that step needs.
+ * Amounts are scaled to the servings planned for this meal.
+ */
 export const CookingMode = () => {
     const { mealId } = useParams();
     const navigate = useNavigate();
-    const [meal, setMeal] = useState<any>(null);
-    const [recipe, setRecipe] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set());
-    const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions'>('ingredients');
     const isMobile = useIsMobile();
+    const timer = useCountdown();
 
-    // Timer state
-    const [timeLeft, setTimeLeft] = useState(0);
-    const [isTimerRunning, setIsTimerRunning] = useState(false);
-    const [timerInput, setTimerInput] = useState(5);
+    const [recipe, setRecipe] = useState<Recipe | null>(null);
+    const [plannedServings, setPlannedServings] = useState<number | null>(null);
+    const [mealLabel, setMealLabel] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [phase, setPhase] = useState<Phase>('ready');
+    const [stepIndex, setStepIndex] = useState(0);
+    const [checked, setChecked] = useState<Set<string>>(new Set());
+    const [showPresets, setShowPresets] = useState(false);
 
     useEffect(() => {
-        const loadMealData = async () => {
+        const load = async () => {
             if (!mealId) return;
             setLoading(true);
             try {
-                const { data: mealData } = await supabase
+                const { data: meal, error } = await supabase
                     .from('meal_plan_entries')
-                    .select('*')
+                    .select('recipe_id, servings, slot, diner_type')
                     .eq('id', mealId)
                     .single();
-
-                if (mealData) {
-                    setMeal(mealData);
-                    if (mealData.recipe_id) {
-                        const recipeData = await recipeService.getRecipe(mealData.recipe_id);
-                        setRecipe(recipeData);
-                    }
-                }
+                if (error) throw error;
+                setPlannedServings(meal.servings);
+                setMealLabel(`${meal.slot} · ${meal.diner_type}`);
+                if (meal.recipe_id) setRecipe(await recipeService.getRecipe(meal.recipe_id));
             } catch (e) {
-                console.error(e);
+                console.error('Failed to load meal for cooking:', e);
             } finally {
                 setLoading(false);
             }
         };
-
-        loadMealData();
+        load();
     }, [mealId]);
 
-    useEffect(() => {
-        let interval: any;
-        if (isTimerRunning && timeLeft > 0) {
-            interval = setInterval(() => {
-                setTimeLeft((prev) => prev - 1);
-            }, 1000);
-        } else if (timeLeft === 0) {
-            setIsTimerRunning(false);
-        }
-        return () => clearInterval(interval);
-    }, [isTimerRunning, timeLeft]);
+    if (loading) {
+        return <div className="p-20 text-center text-ink-300"><ChefHat className="animate-bounce inline-block" size={40} /></div>;
+    }
+    if (!recipe) {
+        return (
+            <div className="p-12 text-center space-y-4">
+                <p className="text-ink-500">This meal isn't a recipe you can cook.</p>
+                <button onClick={() => navigate('/cooking')} className="text-accent font-semibold">Back to Cook</button>
+            </div>
+        );
+    }
 
-    const toggleIngredient = (id: string) => {
-        const newSet = new Set(checkedIngredients);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
-        setCheckedIngredients(newSet);
-    };
+    const ingredients: CookIngredient[] = recipe.ingredients ?? [];
+    const steps = cookingSteps(recipe.steps, recipe.instructions);
+    const factor = servingsFactor(plannedServings, recipe.servings);
+    const servings = plannedServings ?? recipe.servings;
 
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
+    const toggle = (id: string) => setChecked(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
 
-    const startTimer = () => {
-        if (timeLeft === 0) setTimeLeft(timerInput * 60);
-        setIsTimerRunning(true);
-    };
-
-    if (loading) return <div className="p-20 text-center"><ChefHat className="animate-spin inline-block mr-2" /> Loading Chef Station...</div>;
+    const checklist = (
+        <IngredientChecklist ingredients={ingredients} factor={factor} checked={checked} onToggle={toggle} />
+    );
+    const stepCards = (
+        <StepCards
+            steps={steps}
+            ingredients={ingredients}
+            factor={factor}
+            index={stepIndex}
+            onIndexChange={setStepIndex}
+            onStartTimer={timer.start}
+            onFinish={() => navigate('/cooking')}
+        />
+    );
 
     return (
-        <div className="max-w-5xl mx-auto space-y-8 pb-32">
-            <PageHeader
-                title={recipe?.name || "Loading..."}
-                subtitle={<div className="flex items-center gap-2"><span className="zen-badge">{meal?.slot}</span><span className="text-ink-300">•</span><span>{meal?.diner_type}</span></div>}
-                actions={
-                    <Button variant="ghost" size="sm" onClick={() => navigate('/cooking')}>
-                        <ChevronLeft size={20} className="mr-1" />
-                        Back to Terminal
-                    </Button>
-                }
-            />
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Mobile Tab Navigation */}
-                {isMobile && (
-                    <div className="flex p-1 bg-base-200 rounded-xl">
-                        <button
-                            onClick={() => setActiveTab('ingredients')}
-                            className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'ingredients'
-                                    ? 'bg-white shadow-sm text-accent'
-                                    : 'text-ink-500'
-                                }`}
-                        >
-                            <List size={16} />
-                            Ingredients
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('instructions')}
-                            className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'instructions'
-                                    ? 'bg-white shadow-sm text-accent'
-                                    : 'text-ink-500'
-                                }`}
-                        >
-                            <BookOpen size={16} />
-                            Instructions
-                        </button>
-                    </div>
-                )}
-
-                {/* Ingredients / Mise en Place */}
-                <div className={`lg:col-span-1 space-y-6 ${isMobile && activeTab !== 'ingredients' ? 'hidden' : ''}`}>
-                    <div>
-                        <h2 className="section-title flex items-center gap-2">
-                            <CheckCircle2 size={12} />
-                            Mise en Place
-                        </h2>
-                        <Card className="p-4 space-y-2">
-                            {recipe?.ingredients?.map((item: any) => (
-                                <label
-                                    key={item.id}
-                                    className={`flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer hover:bg-base-200 ${checkedIngredients.has(item.id) ? 'opacity-50' : ''}`}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        className="mt-0.5 w-5 h-5 rounded border-base-300 text-accent focus:ring-accent"
-                                        checked={checkedIngredients.has(item.id)}
-                                        onChange={() => toggleIngredient(item.id)}
-                                    />
-                                    <div className="text-sm sm:text-base">
-                                        <span className="font-semibold">{item.quantity} {item.unit}</span>
-                                        <span className="ml-1 text-ink-700">{item.grocery_type?.name}</span>
-                                    </div>
-                                </label>
-                            ))}
-                        </Card>
-                    </div>
-
-                    {/* Timer Tool */}
-                    <div>
-                        <h2 className="section-title flex items-center gap-2">
-                            <Timer size={12} />
-                            Active Timer
-                        </h2>
-                        <Card className="p-6 text-center space-y-4 bg-ink-900 text-white border-none shadow-xl">
-                            <div className="text-5xl font-mono font-bold tracking-tighter">
-                                {formatTime(timeLeft || timerInput * 60)}
-                            </div>
-                            <div className="flex justify-center gap-2">
-                                {!isTimerRunning ? (
-                                    <Button onClick={startTimer} className="bg-white text-ink-900 hover:bg-white/90">
-                                        <Play size={18} fill="currentColor" />
-                                        Start
-                                    </Button>
-                                ) : (
-                                    <Button onClick={() => setIsTimerRunning(false)} variant="secondary">
-                                        <Pause size={18} fill="currentColor" />
-                                        Pause
-                                    </Button>
-                                )}
-                                <Button
-                                    variant="ghost"
-                                    className="text-white/40 hover:text-white hover:bg-white/10"
-                                    onClick={() => { setTimeLeft(0); setIsTimerRunning(false); }}
-                                >
-                                    <RotateCcw size={18} />
-                                </Button>
-                            </div>
-                            <div className="flex items-center gap-2 justify-center text-xs text-white/40">
-                                <span>Set for</span>
-                                <input
-                                    type="number"
-                                    value={timerInput}
-                                    onChange={(e) => setTimerInput(parseInt(e.target.value) || 0)}
-                                    className="bg-transparent border-b border-white/20 w-8 text-center focus:outline-none focus:border-white"
-                                />
-                                <span>minutes</span>
-                            </div>
-                        </Card>
+        <div className="max-w-5xl mx-auto pb-32 space-y-5">
+            {/* Header */}
+            <header className="flex items-start gap-3">
+                <button
+                    onClick={() => navigate('/cooking')}
+                    className="flex-shrink-0 -ml-2 p-2 rounded-lg text-ink-500 hover:bg-base-300"
+                    aria-label="Back to Cook"
+                >
+                    <ChevronLeft size={22} />
+                </button>
+                <RecipeThumb imageUrl={recipe.image_url} name={recipe.name} className="w-14 h-14 rounded-xl" />
+                <div className="flex-1 min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-bold text-ink-900 leading-tight">{recipe.name}</h1>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-ink-500">
+                        <span>{mealLabel}</span>
+                        {servings && <span>Serves {servings}</span>}
+                        <SourceLink url={recipe.web_source} />
                     </div>
                 </div>
+                <button
+                    onClick={() => setShowPresets(v => !v)}
+                    className={`flex-shrink-0 p-2 rounded-lg ${showPresets ? 'bg-accent/10 text-accent' : 'text-ink-500 hover:bg-base-300'}`}
+                    aria-label="Set a timer"
+                    aria-expanded={showPresets}
+                >
+                    <Timer size={20} />
+                </button>
+            </header>
 
-                {/* Instructions */}
-                <div className={`lg:col-span-2 space-y-6 ${isMobile && activeTab !== 'instructions' ? 'hidden' : ''}`}>
-                    <div>
-                        <h2 className="section-title flex items-center gap-2">
-                            <ChefHat size={12} />
-                            Execution Steps
-                        </h2>
-                        <Card className="p-8">
-                            <p className="text-ink-700 leading-relaxed whitespace-pre-wrap text-lg">
-                                {recipe?.instructions || "No instructions provided for this recipe."}
-                            </p>
-                        </Card>
-                    </div>
-
-                    <div className="flex justify-end pt-4">
-                        <Button size="lg" className="px-12" onClick={() => navigate('/cooking')}>
-                            Meal Completed
-                        </Button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Mobile Sticky Timer */}
-            {isMobile && (isTimerRunning || timeLeft > 0) && (
-                <div className="fixed bottom-20 left-2 right-2 bg-ink-900 text-white rounded-xl shadow-2xl p-4 flex items-center justify-between z-50">
-                    <div className="text-3xl font-mono font-bold">
-                        {formatTime(timeLeft)}
-                    </div>
-                    <div className="flex gap-2">
-                        {isTimerRunning ? (
-                            <Button onClick={() => setIsTimerRunning(false)} variant="secondary" size="sm">
-                                <Pause size={16} fill="currentColor" />
-                            </Button>
-                        ) : (
-                            <Button onClick={startTimer} size="sm" className="bg-white text-ink-900">
-                                <Play size={16} fill="currentColor" />
-                            </Button>
-                        )}
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-white/40 hover:text-white"
-                            onClick={() => { setTimeLeft(0); setIsTimerRunning(false); }}
+            {showPresets && (
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Timer presets">
+                    {TIMER_PRESETS.map(m => (
+                        <button
+                            key={m}
+                            onClick={() => { timer.start(m); setShowPresets(false); }}
+                            className="px-3.5 py-1.5 rounded-full border border-base-300 bg-white text-sm font-semibold text-ink-700 active:bg-base-200"
                         >
-                            <RotateCcw size={16} />
-                        </Button>
-                    </div>
+                            {m} min
+                        </button>
+                    ))}
                 </div>
             )}
+
+            {isMobile ? (
+                <>
+                    <div className="flex p-1 bg-base-300/60 rounded-xl" role="tablist">
+                        {([['ready', `Get ready ${checked.size}/${ingredients.length}`], ['cook', `Cook · ${steps.length} steps`]] as const).map(([key, label]) => (
+                            <button
+                                key={key}
+                                role="tab"
+                                aria-selected={phase === key}
+                                onClick={() => setPhase(key)}
+                                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${phase === key ? 'bg-white shadow-sm text-ink-900' : 'text-ink-500'}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    {phase === 'ready' ? (
+                        <div className="space-y-5">
+                            {checklist}
+                            <button
+                                onClick={() => setPhase('cook')}
+                                className="w-full py-3.5 rounded-xl bg-accent text-white font-semibold active:bg-accent/90"
+                            >
+                                Start cooking
+                            </button>
+                        </div>
+                    ) : stepCards}
+                </>
+            ) : (
+                <div className="grid grid-cols-5 gap-8 items-start">
+                    <div className="col-span-2 space-y-2">
+                        <h2 className="section-title">Get ready · {checked.size}/{ingredients.length}</h2>
+                        {checklist}
+                    </div>
+                    <div className="col-span-3 sticky top-8">{stepCards}</div>
+                </div>
+            )}
+
+            <CookTimer timer={timer} />
         </div>
     );
 };
