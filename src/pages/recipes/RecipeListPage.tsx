@@ -9,11 +9,16 @@ import { Card } from '../../components/ui/Card';
 import { toast } from 'sonner';
 
 const RECIPE_CATEGORIES = [
-    { key: 'parent_meals', label: 'Parent Meals' },
+    { key: 'meals', label: 'Meals' },
+    { key: 'salads', label: 'Salads' },
     { key: 'kids_meals', label: 'Kids Meals' },
     { key: 'breakfasts', label: 'Breakfasts' },
-    { key: 'other', label: 'Other' },
+    { key: 'sides_snacks', label: 'Sides & Snacks' },
+    { key: 'desserts', label: 'Desserts' },
 ];
+
+/** Where a recipe lands when its category is null or no longer recognised. */
+const DEFAULT_CATEGORY = 'meals';
 
 export const RecipeListPage = () => {
     const navigate = useNavigate();
@@ -124,7 +129,7 @@ export const RecipeListPage = () => {
     const grouped: Record<string, RecipeSummary[]> = {};
     RECIPE_CATEGORIES.forEach(cat => { grouped[cat.key] = []; });
     filtered.forEach(recipe => {
-        const cat = recipe.category || 'other';
+        const cat = recipe.category || DEFAULT_CATEGORY;
         if (!grouped[cat]) grouped[cat] = [];
         grouped[cat].push(recipe);
     });
@@ -163,7 +168,7 @@ export const RecipeListPage = () => {
                 </td>
                 <td className="zen-table-cell" onClick={(e) => e.stopPropagation()}>
                     <select
-                        value={recipe.category || 'other'}
+                        value={recipe.category || DEFAULT_CATEGORY}
                         onChange={(e) => handleCategoryChange(recipe, e.target.value)}
                         className="text-xs border border-base-300 rounded-lg px-2 py-1 bg-white text-ink-700 cursor-pointer hover:border-accent transition-colors focus:ring-1 focus:ring-accent focus:outline-none"
                     >
@@ -203,7 +208,7 @@ export const RecipeListPage = () => {
                 </div>
                 <div className="mt-2 pt-2 border-t border-base-200">
                     <select
-                        value={recipe.category || 'other'}
+                        value={recipe.category || DEFAULT_CATEGORY}
                         onChange={(e) => handleCategoryChange(recipe, e.target.value)}
                         className="w-full text-xs border border-base-300 rounded-lg px-2 py-1.5 bg-white text-ink-700 cursor-pointer"
                     >
