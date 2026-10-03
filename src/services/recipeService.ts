@@ -75,7 +75,7 @@ export const recipeService = {
     async createRecipe(name: string, instructions: string, servings: number) {
         const { data, error } = await supabase
             .from('recipes')
-            .insert({ name, instructions, servings, category: 'other' })
+            .insert({ name, instructions, servings, category: 'meals' })
             .select()
             .single();
         if (error) throw error;
