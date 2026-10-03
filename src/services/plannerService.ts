@@ -170,7 +170,7 @@ export const plannerService = {
             .from('meal_plan_entries')
             .select(`
                 *,
-                recipe:recipes (id, name),
+                recipe:recipes (id, name, image_url, web_source),
                 list:grocery_lists (id, name),
                 item:grocery_types (id, name)
             `)
@@ -193,7 +193,7 @@ export const plannerService = {
                 grocery_types (
                     id,
                     name,
-                    category: grocery_categories (name),
+                    category: grocery_categories (name, sort_order),
                     store: stores (id, name)
                 ),
                 meal_plan: meal_plan_entries (

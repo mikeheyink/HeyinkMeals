@@ -1,9 +1,10 @@
 import { useRef, useEffect } from 'react';
 import { format, isToday, isSameDay } from 'date-fns';
-import { ChefHat, ChevronRight, ChevronLeft, BookOpen, Clock } from 'lucide-react';
+import { ChefHat, ChevronRight, ChevronLeft, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/Button';
 import { planEntryLabel, isCookable } from '../lib/planEntry';
+import { RecipeThumb } from './recipes/RecipeThumb';
 
 interface MobileCookingViewProps {
     days: Date[];
@@ -170,7 +171,14 @@ export const MobileCookingView = ({
                         <Clock size={14} />
                         <span>Up Next • {nextMeals[0].time}</span>
                     </div>
-                    <h2 className="text-2xl font-bold mb-1">{nextMeals[0].displayName}</h2>
+                    <div className="flex items-center gap-3 mb-1">
+                        <RecipeThumb
+                            imageUrl={nextMeals[0].plan.recipe?.image_url}
+                            name={nextMeals[0].displayName}
+                            className="w-14 h-14 rounded-xl bg-white/20 text-white"
+                        />
+                        <h2 className="text-2xl font-bold">{nextMeals[0].displayName}</h2>
+                    </div>
                     <div className="flex items-center gap-2 text-white/80 text-sm mb-4">
                         <span className="bg-white/20 px-2 py-0.5 rounded text-xs font-bold uppercase">
                             {nextMeals[0].slot}
@@ -213,9 +221,7 @@ export const MobileCookingView = ({
                         {dayPlans.map(({ plan, displayName, cookable, slot, diner }) => {
                             const content = (
                                 <>
-                                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-base-200 flex items-center justify-center">
-                                        <BookOpen size={18} className="text-ink-500" />
-                                    </div>
+                                    <RecipeThumb imageUrl={plan.recipe?.image_url} name={displayName} className="w-12 h-12 rounded-lg" />
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-bold text-ink-900 truncate">{displayName}</h4>
                                         <div className="flex items-center gap-2 text-xs text-ink-500">
