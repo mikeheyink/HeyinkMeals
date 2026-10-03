@@ -10,6 +10,7 @@ export interface RecipeSummary {
     servings: number | null;
     total_time_mins: number | null;
     web_source: string | null;
+    image_url: string | null;
     isFavourite: boolean;
     itemCount: number;
 }
@@ -22,6 +23,7 @@ interface RecipeSummaryRow {
     servings: number | null;
     total_time_mins: number | null;
     web_source: string | null;
+    image_url?: string | null;
     ingredients: unknown;
 }
 
@@ -34,6 +36,7 @@ const toSummary = (row: RecipeSummaryRow, isFavourite: boolean): RecipeSummary =
         servings: row.servings,
         total_time_mins: row.total_time_mins,
         web_source: row.web_source,
+        image_url: row.image_url ?? null,
         isFavourite,
         itemCount: counts?.[0]?.count ?? 0,
     };
@@ -47,7 +50,7 @@ export const recipeService = {
         const { data, error } = await supabase
             .from('recipes')
             .select(`
-                id, name, category, servings, total_time_mins, web_source, is_favourite,
+                id, name, category, servings, total_time_mins, web_source, image_url, is_favourite,
                 ingredients:recipe_ingredients(count)
             `)
             .eq('is_archived', false)
@@ -84,7 +87,7 @@ export const recipeService = {
 
     async updateRecipe(
         recipeId: string,
-        updates: Partial<Pick<Recipe, 'name' | 'instructions' | 'servings' | 'web_source' | 'category'>>
+        updates: Partial<Pick<Recipe, 'name' | 'instructions' | 'servings' | 'web_source' | 'image_url' | 'steps' | 'category'>>
     ) {
         const { error } = await supabase.from('recipes').update(updates).eq('id', recipeId);
         if (error) throw error;
@@ -122,7 +125,7 @@ export const recipeService = {
                 *,
                 ingredients:recipe_ingredients (
                     id, grocery_type_id, quantity, unit,
-                    grocery_type:grocery_types (name)
+                    grocery_type:grocery_types (name, category:grocery_categories (name, sort_order))
                 )
             `)
             .eq('id', recipeId)

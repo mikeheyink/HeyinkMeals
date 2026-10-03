@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { MobileCookingView } from '../../components/MobileCookingView';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { planEntryLabel, isCookable } from '../../lib/planEntry';
+import { RecipeThumb } from '../../components/recipes/RecipeThumb';
 
 export const CookingPage = () => {
     const navigate = useNavigate();
@@ -220,9 +221,14 @@ export const CookingPage = () => {
                                                                         <BookOpen size={10} />
                                                                         <span className="text-[9px] font-bold uppercase tracking-tight">{meal}</span>
                                                                     </div>
-                                                                    <span className="text-xs font-bold text-ink-900 line-clamp-2 leading-tight block">
-                                                                        {planEntryLabel(plan)}
-                                                                    </span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {cookable && (
+                                                                            <RecipeThumb imageUrl={plan.recipe?.image_url} name={planEntryLabel(plan)} className="w-8 h-8 rounded-md text-xs" />
+                                                                        )}
+                                                                        <span className="text-xs font-bold text-ink-900 line-clamp-2 leading-tight block">
+                                                                            {planEntryLabel(plan)}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
                                                                 {cookable && (
                                                                     <Button

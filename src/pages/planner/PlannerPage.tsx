@@ -9,6 +9,8 @@ import { MobilePlannerView } from '../../components/MobilePlannerView';
 import { AddRecipeModal } from '../../components/AddRecipeModal';
 import { PlannerGrid } from '../../components/planner/PlannerGrid';
 import { PlanEntryForm } from '../../components/planner/PlanEntryForm';
+import { PlanEntrySheet } from '../../components/planner/PlanEntrySheet';
+import type { PlannedEntry } from '../../components/planner/PlanEntrySheet';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 
 /** What the "new recipe" flow hands back; undefined when the user cancelled. */
@@ -38,6 +40,7 @@ export const PlannerPage = () => {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false);
     const [selectedSlotForDrawer, setSelectedSlotForDrawer] = useState<{ date: Date; meal: string } | null>(null);
+    const [openEntry, setOpenEntry] = useState<PlannedEntry | null>(null);
 
     // Anchor (leftmost visible day). Local-only — every hard refresh resets to today.
     const [anchorDate, setAnchorDate] = useState<Date>(() => startOfDay(new Date()));
@@ -158,10 +161,11 @@ export const PlannerPage = () => {
                 subtitle={`${format(days[0] || new Date(), 'MMM d')} — ${format(days[10] || new Date(), 'MMM d')}`}
                 actions={
                     <div className="flex items-center gap-2">
-                        {/* Week Navigation */}
+                        {/* Week Navigation (on phones the week strip has its own arrows) */}
                         <div className="flex items-center gap-1 bg-base-200/60 rounded-lg p-1">
                             <button
                                 onClick={() => navigateWeek('prev')}
+                                hidden={isMobile}
                                 className="p-1.5 rounded-md hover:bg-base-300 transition-colors text-ink-500 hover:text-ink-900"
                                 title="Previous week"
                             >
@@ -179,6 +183,7 @@ export const PlannerPage = () => {
                             </button>
                             <button
                                 onClick={() => navigateWeek('next')}
+                                hidden={isMobile}
                                 className="p-1.5 rounded-md hover:bg-base-300 transition-colors text-ink-500 hover:text-ink-900"
                                 title="Next week"
                             >
@@ -329,8 +334,6 @@ export const PlannerPage = () => {
                     onCreateItem={handleCreateItem}
                     onRequestPreviousWeek={() => navigateWeek('prev')}
                     onRequestNextWeek={() => navigateWeek('next')}
-                    onJumpToToday={jumpToToday}
-                    viewContainsToday={viewContainsToday}
                 />
             ) : (
                 <PlannerGrid
@@ -339,8 +342,11 @@ export const PlannerPage = () => {
                     activeConfigs={activeConfigs}
                     onSelectSlot={(date, meal) => setSelectedSlotForDrawer({ date, meal })}
                     onDeleteMeal={handleDeleteMeal}
+                    onOpenEntry={setOpenEntry}
                 />
             )}
+
+            <PlanEntrySheet entry={openEntry} onClose={() => setOpenEntry(null)} onRemove={handleDeleteMeal} />
 
             {/* Desktop Slide-over Drawer for Adding Meals */}
             {selectedSlotForDrawer && !isMobile && (

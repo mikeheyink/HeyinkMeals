@@ -9,6 +9,11 @@ import { AddGroceryModal } from '../../components/AddGroceryModal';
 import { ArrowLeft, Save, Plus, X } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { toast } from 'sonner';
+import { StepsEditor } from '../../components/recipes/StepsEditor';
+import { RecipeThumb } from '../../components/recipes/RecipeThumb';
+import { cookingSteps, stepsToInstructions, stepsToJson } from '../../lib/recipeSteps';
+import type { RecipeStep } from '../../lib/recipeSteps';
+import { UNITS, DEFAULT_UNIT, formatAmount } from '../../lib/units';
 
 export const RecipeEditor = () => {
     const { id } = useParams();
@@ -22,12 +27,15 @@ export const RecipeEditor = () => {
     const [name, setName] = useState('');
     const [servings, setServings] = useState(4);
     const [instructions, setInstructions] = useState('');
+    const [steps, setSteps] = useState<RecipeStep[]>([]);
+    const [webSource, setWebSource] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
     const [ingredients, setIngredients] = useState<any[]>([]);
 
     // Add Ingredient State
     const [selGrocery, setSelGrocery] = useState('');
     const [qty, setQty] = useState(1);
-    const [unit, setUnit] = useState('items');
+    const [unit, setUnit] = useState<string>(DEFAULT_UNIT);
     const [isAddGroceryModalOpen, setIsAddGroceryModalOpen] = useState(false);
 
     useEffect(() => {
@@ -42,6 +50,9 @@ export const RecipeEditor = () => {
                     setName(r.name);
                     setServings(r.servings || 4);
                     setInstructions(r.instructions || '');
+                    setSteps(cookingSteps(r.steps, r.instructions));
+                    setWebSource(r.web_source || '');
+                    setImageUrl(r.image_url || '');
                     setIngredients((r as any).ingredients || []);
                 }
             }
@@ -57,7 +68,19 @@ export const RecipeEditor = () => {
                 const r = await recipeService.createRecipe(name, instructions, servings);
                 navigate(`/recipes/${r.id}`);
             } else {
-                await recipeService.updateRecipe(id!, { name, instructions, servings });
+                // Drop empty steps and references to ingredients that have since been removed.
+                const ingredientIds = new Set(ingredients.map((i: { id: string }) => i.id));
+                const cleanSteps = steps
+                    .filter(s => s.text.trim())
+                    .map(s => ({ ...s, ingredients: s.ingredients.filter(r => ingredientIds.has(r.ingredient_id)) }));
+                await recipeService.updateRecipe(id!, {
+                    name,
+                    servings,
+                    steps: stepsToJson(cleanSteps),
+                    instructions: stepsToInstructions(cleanSteps),
+                    web_source: webSource.trim() || null,
+                    image_url: imageUrl.trim() || null,
+                });
                 toast.success('Recipe saved');
             }
         } catch (e) {
@@ -131,15 +154,17 @@ export const RecipeEditor = () => {
                                 />
                             </div>
 
-                            <div>
-                                <label className="section-title">Execution Steps</label>
-                                <textarea
-                                    value={instructions}
-                                    onChange={e => setInstructions(e.target.value)}
-                                    className="zen-input w-full h-48 resize-none text-base"
-                                    placeholder="Detailed instructions..."
-                                />
-                            </div>
+                            {isNew && (
+                                <div>
+                                    <label className="section-title">Execution Steps</label>
+                                    <textarea
+                                        value={instructions}
+                                        onChange={e => setInstructions(e.target.value)}
+                                        className="zen-input w-full h-48 resize-none text-base"
+                                        placeholder="Detailed instructions..."
+                                    />
+                                </div>
+                            )}
                         </div>
                     </Card>
 
@@ -173,11 +198,13 @@ export const RecipeEditor = () => {
                                     </div>
                                     <div className="w-full md:w-28">
                                         <label className="text-[10px] font-bold uppercase text-ink-300 block mb-1">Unit</label>
-                                        <input
+                                        <select
                                             value={unit}
                                             onChange={e => setUnit(e.target.value)}
                                             className="zen-input w-full"
-                                        />
+                                        >
+                                            {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                        </select>
                                     </div>
                                     <Button size="sm" onClick={handleAddIngredient} icon={Plus}>Add</Button>
                                 </div>
@@ -187,7 +214,7 @@ export const RecipeEditor = () => {
                                         <div key={ing.id} className="flex justify-between items-center gap-3 p-3 border-b border-base-300 last:border-0 hover:bg-base-100 transition-colors rounded-lg">
                                             <span className="font-semibold text-ink-900 flex-1 truncate">{ing.grocery_type?.name}</span>
                                             <span className="text-accent font-bold text-sm">
-                                                {ing.quantity} {ing.unit}
+                                                {formatAmount(ing.quantity, ing.unit)}
                                             </span>
                                             <button
                                                 onClick={() => handleRemoveIngredient(ing.id)}
@@ -207,6 +234,17 @@ export const RecipeEditor = () => {
                             </Card>
                         </div>
                     )}
+
+                    {!isNew && (
+                        <div>
+                            <h2 className="section-title mb-4 pl-1">Cooking Steps</h2>
+                            <StepsEditor
+                                steps={steps}
+                                ingredients={ingredients.map((i: { id: string; grocery_type?: { name: string } | null }) => ({ id: i.id, name: i.grocery_type?.name ?? 'Unknown' }))}
+                                onChange={setSteps}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Sidebar / Actions */}
@@ -223,6 +261,34 @@ export const RecipeEditor = () => {
                                     className="zen-input w-full"
                                 />
                             </div>
+
+                            {!isNew && (
+                                <>
+                                    <div>
+                                        <label className="text-[10px] font-bold uppercase text-ink-300 block mb-1">Original recipe link</label>
+                                        <input
+                                            type="url"
+                                            value={webSource}
+                                            onChange={e => setWebSource(e.target.value)}
+                                            className="zen-input w-full"
+                                            placeholder="https://…"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold uppercase text-ink-300 block mb-1">Photo URL</label>
+                                        <div className="flex items-center gap-2">
+                                            <RecipeThumb key={imageUrl} imageUrl={imageUrl} name={name || '?'} className="w-10 h-10 rounded-lg" />
+                                            <input
+                                                type="url"
+                                                value={imageUrl}
+                                                onChange={e => setImageUrl(e.target.value)}
+                                                className="zen-input w-full"
+                                                placeholder="https://…/photo.jpg"
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
 
                             <hr className="border-base-300 my-4" />
 

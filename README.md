@@ -67,6 +67,11 @@ categories, and enables RLS. You're done — skip to step 4.
 4. `20260920_add_recipe_favourites.sql` — **additive**: adds `recipes.is_favourite` for the star
    toggle in the recipe library and the "Favourites" filter in the planner's picker. Until it's
    applied the app still loads; nothing is starred and starring fails with a toast.
+5. `20261003_kitchen_zones_cleanup.sql` — **data migration** (already applied to the household DB):
+   turns grocery categories into kitchen storage zones in walking order, merges duplicate grocery
+   items (repointing every reference), normalises units, and converts ready-meal "recipes" to Items.
+6. `20261003_recipe_image_and_steps.sql` — **additive**: `recipes.image_url` (thumbnail) and
+   `recipes.steps` (step-by-step cooking cards). Recipes without steps fall back to `instructions`.
 
 `supabase/migrations/20260118_add_vector_embeddings.sql` exists but is **not used by the app** yet (see
 [Known limitations](#known-limitations--architectural-notes)).
@@ -93,12 +98,16 @@ npm run preview   # preview the production build
 
 See `schema.sql` for the canonical schema. The model keeps three user concepts cleanly separated:
 
-- **Grocery Category** — supermarket-aisle grouping (Produce, Pantry, …) with a `sort_order`.
+- **Grocery Category** — a *kitchen storage zone* (Counter & Fruit Bowl, Fridge, Freezer, Pantry
+  sub-zones, Herbs & Spices …). `sort_order` is the order you walk the kitchen; the Shop list and
+  Cooking Mode's "Get ready" checklist group by it so everything in one place is ticked off together.
 - **Store** — a shop (e.g. Woolworths). A grocery item can have a *preferred* store.
 - **Grocery Type (Item)** — the "library" definition of an ingredient/product (name, category,
   default store).
-- **Recipe** — name, servings, prep/cook time, instructions, category. **Owns its ingredients
-  directly** via `recipe_ingredients` (recipe → grocery type, with quantity + unit).
+- **Recipe** — name, servings, time, category, source link (`web_source`), thumbnail (`image_url`)
+  and **step cards** (`steps`: each step's text, the ingredients it uses, an optional timer).
+  **Owns its ingredients directly** via `recipe_ingredients` (recipe → grocery type, with quantity +
+  a canonical SA-metric unit from `src/lib/units.ts`).
 - **List** — a reusable, independently-editable bundle of grocery items (`grocery_lists` +
   `grocery_list_items`). Not tied to a date — push it onto the shopping list, or drop it into a meal
   slot, whenever you like.
@@ -132,8 +141,11 @@ Navigation: **Plan**, **Shop**, **Cook**, a **Kitchen** library (Recipes / Lists
 - Add grocery items with a category and optional preferred store; create categories on the fly;
   edit/delete items.
 
-### Plan (`PlannerPage`, `MobilePlannerView`, `PlanEntryForm`, `PlannerGrid`)
+### Plan (`PlannerPage`, `MobilePlannerView`, `PlanEntryForm`, `PlannerGrid`, `PlanEntrySheet`)
 - Customisable grid: which diner groups and slots are shown is configurable and persisted.
+- On phones: one scrolling agenda of days with a sticky week strip; planned meals show a thumbnail,
+  empty slots are a single "+" row, and adding happens in a bottom sheet.
+- Tap a planned meal for its photo, a link to the original recipe, **Cook** and **Remove**.
 - Tap a slot and add **any** of: a **Recipe** (choosing servings), a single **Item** (with quantity +
   unit), a **List**, or a freeform **Note**. Create a new recipe inline if it doesn't exist yet.
 - Remove entries. Scheduling a Recipe/Item/List snapshots its groceries into the shopping ledger;
@@ -149,8 +161,10 @@ Navigation: **Plan**, **Shop**, **Cook**, a **Kitchen** library (Recipes / Lists
 
 ### Cook (`CookingPage`, `CookingMode`, `MobileCookingView`)
 - A weekly cooking grid / day-by-day mobile view of scheduled meals. Only **Recipe** entries are
-  cookable; tapping one opens a distraction-free **Cooking Mode** (ingredients checklist, instructions,
-  a timer).
+  cookable; tapping one opens a distraction-free **Cooking Mode**:
+  - **Get ready** — an ingredient checklist grouped by kitchen zone, scaled to the planned servings.
+  - **Cook** — one step card at a time (swipe / Next): the step's ingredients and amounts, then the
+    instruction, with a one-tap timer where the step has a wait. Header timer presets for anything else.
 
 ### Settings (`AdminPage`)
 - **Sign out**, plus a voice-feedback recorder (Web Speech API).
@@ -190,6 +204,12 @@ supabase/migrations/        # incremental SQL for an existing DB (redesign + cle
 ```
 
 `AGENTS.md` documents the engineering conventions expected of contributors.
+
+### Using Claude as the kitchen assistant
+`CLAUDE.md` plus `docs/claude/recipes.md` (how recipes are written: SA units, ingredient naming,
+kitchen zones, step cards) and `docs/claude/meal-planning.md` (recommending and scheduling meals,
+household preferences). In Claude Code, `/add-recipe <url>` and `/plan-week` run those workflows. The
+guides are living documents — Claude offers to update them when you mention a lasting preference.
 
 ---
 

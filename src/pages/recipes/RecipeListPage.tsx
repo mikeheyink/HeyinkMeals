@@ -7,6 +7,8 @@ import { Plus, BookOpen, Package, Search, ChevronDown, ChevronRight, CheckSquare
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { toast } from 'sonner';
+import { RecipeThumb } from '../../components/recipes/RecipeThumb';
+import { SourceLink } from '../../components/recipes/SourceLink';
 
 const RECIPE_CATEGORIES = [
     { key: 'meals', label: 'Meals' },
@@ -154,10 +156,11 @@ export const RecipeListPage = () => {
                 </td>
                 <td className="zen-table-cell">
                     <div className="flex items-center gap-3">
-                        <div className="p-1.5 bg-base-300 rounded text-ink-500 group-hover:text-accent transition-colors">
-                            <BookOpen size={16} />
+                        <RecipeThumb imageUrl={recipe.image_url} name={recipe.name} className="w-10 h-10 rounded-lg text-sm" />
+                        <div className="min-w-0">
+                            <span className="block font-bold text-ink-900 group-hover:text-accent transition-colors">{recipe.name}</span>
+                            <SourceLink url={recipe.web_source} />
                         </div>
-                        <span className="font-bold text-ink-900 group-hover:text-accent transition-colors">{recipe.name}</span>
                     </div>
                 </td>
                 <td className="zen-table-cell">
@@ -194,11 +197,12 @@ export const RecipeListPage = () => {
                                 : <Square size={20} className="text-ink-300" />}
                         </button>
                         {renderStar(recipe, 20)}
-                        <div className="flex items-center gap-2" onClick={() => navigate(`/recipes/${recipe.id}`)}>
-                            <div className="p-1.5 bg-base-200 rounded text-ink-500">
-                                <BookOpen size={16} />
+                        <div className="flex items-center gap-3 min-w-0" onClick={() => navigate(`/recipes/${recipe.id}`)}>
+                            <RecipeThumb imageUrl={recipe.image_url} name={recipe.name} className="w-12 h-12 rounded-lg" />
+                            <div className="min-w-0">
+                                <h3 className="font-bold text-ink-900 text-base leading-tight">{recipe.name}</h3>
+                                <SourceLink url={recipe.web_source} />
                             </div>
-                            <h3 className="font-bold text-ink-900 text-base leading-tight">{recipe.name}</h3>
                         </div>
                     </div>
                     <div className="flex items-center gap-1.5 text-ink-500">

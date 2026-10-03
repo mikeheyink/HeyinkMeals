@@ -1,16 +1,21 @@
-import { useState, useRef } from 'react';
-import { format, isToday, isTomorrow, isYesterday } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { format, isToday, isTomorrow } from 'date-fns';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { PlanEntryForm } from './planner/PlanEntryForm';
+import { PlanEntrySheet } from './planner/PlanEntrySheet';
+import type { PlannedEntry } from './planner/PlanEntrySheet';
+import { ResponsiveModal } from './ui/ResponsiveModal';
+import { RecipeThumb } from './recipes/RecipeThumb';
 import { planEntryLabel } from '../lib/planEntry';
 import type { PlanEntryDraft } from '../services/plannerService';
 
 interface NamedOption { id: string; name: string }
-interface RecipeOption { id: string; name: string; servings?: number | null }
+interface RecipeOption { id: string; name: string; servings?: number | null; isFavourite?: boolean }
+interface SlotTarget { date: Date; slot: string; dinerId: string }
 
 interface MobilePlannerViewProps {
     days: Date[];
-    plans: any[];
+    plans: PlannedEntry[];
     recipes: RecipeOption[];
     items: NamedOption[];
     lists: NamedOption[];
@@ -21,10 +26,17 @@ interface MobilePlannerViewProps {
     onCreateItem?: (name: string) => Promise<string | undefined>;
     onRequestPreviousWeek?: () => void;
     onRequestNextWeek?: () => void;
-    onJumpToToday?: () => void;
-    viewContainsToday?: boolean;
 }
 
+const SLOT_ORDER = ['Breakfast', 'Lunch', 'Dinner'];
+
+const dayLabel = (d: Date) => (isToday(d) ? 'Today' : isTomorrow(d) ? 'Tomorrow' : format(d, 'EEEE'));
+
+/**
+ * The phone planner: one scrolling agenda of days. Each day lists its meal slots as slim rows —
+ * planned meals show a thumbnail and name (tap for details), empty slots are a single quiet "+"
+ * row. Adding happens in a bottom sheet, so the agenda never reflows under your thumb.
+ */
 export const MobilePlannerView = ({
     days,
     plans,
@@ -38,189 +50,147 @@ export const MobilePlannerView = ({
     onCreateItem,
     onRequestPreviousWeek,
     onRequestNextWeek,
-    onJumpToToday,
-    viewContainsToday = true,
 }: MobilePlannerViewProps) => {
-    const [currentDayIndex, setCurrentDayIndex] = useState(() => {
-        const todayIdx = days.findIndex(d => isToday(d));
-        return todayIdx >= 0 ? todayIdx : 0;
-    });
-    const [addingTo, setAddingTo] = useState<{ date: Date; slot: string; dinerId: string } | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const [addingTo, setAddingTo] = useState<SlotTarget | null>(null);
+    const [openEntry, setOpenEntry] = useState<PlannedEntry | null>(null);
+    const dayRefs = useRef<Map<string, HTMLElement>>(new Map());
+    const showDiner = activeConfigs.length > 1;
 
-    const currentDay = days[currentDayIndex];
+    // Rows in the order you eat: Breakfast → Lunch → Dinner, each diner group within a slot.
+    const rows = SLOT_ORDER.flatMap(slot =>
+        activeConfigs.filter(c => c.slots.includes(slot)).map(c => ({ slot, dinerId: c.id })),
+    );
 
-    const getDayLabel = (date: Date) => {
-        if (isToday(date)) return 'Today';
-        if (isTomorrow(date)) return 'Tomorrow';
-        if (isYesterday(date)) return 'Yesterday';
-        return format(date, 'EEEE');
+    const plansFor = (dateStr: string, slot: string, dinerId: string) =>
+        plans.filter(p => p.date === dateStr && p.slot === slot && p.diner_type === dinerId);
+
+    const scrollToDay = (day: Date) => {
+        dayRefs.current.get(format(day, 'yyyy-MM-dd'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
-    const getPlansForSlot = (date: Date, mealType: string, dinerType: string) => {
-        const dateStr = format(date, 'yyyy-MM-dd');
-        return plans.filter(p => p.date === dateStr && p.slot === mealType && p.diner_type === dinerType);
-    };
-
-    const handleSwipe = (direction: 'left' | 'right') => {
-        if (direction === 'left') {
-            if (currentDayIndex < days.length - 1) setCurrentDayIndex(prev => prev + 1);
-            else if (onRequestNextWeek) onRequestNextWeek();
-        } else if (direction === 'right') {
-            if (currentDayIndex > 0) setCurrentDayIndex(prev => prev - 1);
-            else if (onRequestPreviousWeek) onRequestPreviousWeek();
-        }
-    };
-
-    const touchStart = useRef<number>(0);
-    const handleTouchStart = (e: React.TouchEvent) => {
-        touchStart.current = e.touches[0].clientX;
-    };
-    const handleTouchEnd = (e: React.TouchEvent) => {
-        const touchEnd = e.changedTouches[0].clientX;
-        const diff = touchStart.current - touchEnd;
-        if (Math.abs(diff) > 50) handleSwipe(diff > 0 ? 'left' : 'right');
-    };
-
-    if (days.length === 0 || !currentDay) {
-        return (
-            <div className="flex items-center justify-center p-12 text-ink-300">
-                <div className="animate-pulse">Loading planner...</div>
-            </div>
-        );
-    }
+    // Land on today when the view first contains it.
+    const firstDay = days[0] ? format(days[0], 'yyyy-MM-dd') : '';
+    useEffect(() => {
+        const today = days.find(d => isToday(d));
+        if (today) dayRefs.current.get(format(today, 'yyyy-MM-dd'))?.scrollIntoView({ block: 'start' });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [firstDay]);
 
     return (
-        <div className="space-y-4">
-            {/* Day Navigation Header */}
-            <div className="flex items-center justify-between bg-white rounded-xl border border-base-300 p-3 shadow-sm">
-                <button onClick={() => handleSwipe('right')} className="p-2 rounded-lg hover:bg-base-200 transition-colors">
-                    <ChevronLeft size={24} />
+        <div className="-mx-4">
+            {/* Week strip — jump to a day; dots show days that already have something planned */}
+            <div className="sticky top-0 z-30 bg-base-200/95 backdrop-blur px-2 py-2 flex items-center gap-1 border-b border-base-300">
+                <button onClick={onRequestPreviousWeek} className="p-2 text-ink-400 active:text-ink-900" aria-label="Previous week">
+                    <ChevronLeft size={18} />
                 </button>
-                <div className="text-center flex-1">
-                    <div className={`text-lg font-bold ${isToday(currentDay) ? 'text-accent' : 'text-ink-900'}`}>
-                        {getDayLabel(currentDay)}
-                    </div>
-                    <div className="text-xs text-ink-500">{format(currentDay, 'MMMM d, yyyy')}</div>
-                </div>
-                <button onClick={() => handleSwipe('left')} className="p-2 rounded-lg hover:bg-base-200 transition-colors">
-                    <ChevronRight size={24} />
-                </button>
-            </div>
-
-            {/* Day dots indicator with Today button */}
-            <div className="flex items-center justify-center gap-3">
-                {!viewContainsToday && onJumpToToday && (
-                    <button
-                        onClick={onJumpToToday}
-                        className="px-3 py-1 text-xs font-semibold bg-accent text-white rounded-full hover:bg-accent/90 transition-colors"
-                    >
-                        Today
-                    </button>
-                )}
-                {days.map((day, idx) => (
-                    <button
-                        key={day.toString()}
-                        onClick={() => setCurrentDayIndex(idx)}
-                        className={`w-2 h-2 rounded-full transition-all ${idx === currentDayIndex
-                            ? 'bg-accent w-4'
-                            : isToday(day)
-                                ? 'bg-accent/40'
-                                : 'bg-base-300'
-                            }`}
-                    />
-                ))}
-            </div>
-
-            {/* Meal Cards */}
-            <div ref={containerRef} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className="space-y-3">
-                {activeConfigs.map((config) =>
-                    config.slots.map((slot) => {
-                        const slotPlans = getPlansForSlot(currentDay, slot, config.id);
-                        const hasPlans = slotPlans.length > 0;
-                        const isEditing = addingTo?.date === currentDay && addingTo?.slot === slot && addingTo?.dinerId === config.id;
-
+                <div className="flex-1 flex justify-between">
+                    {days.slice(0, 7).map(day => {
+                        const planned = plans.some(p => p.date === format(day, 'yyyy-MM-dd'));
                         return (
-                            <div
-                                key={`${config.id}-${slot}`}
-                                className={`bg-white rounded-xl border border-base-300 overflow-hidden shadow-sm transition-all ${isEditing ? 'ring-2 ring-accent' : ''}`}
+                            <button
+                                key={day.toISOString()}
+                                onClick={() => scrollToDay(day)}
+                                className={`flex flex-col items-center w-10 py-1 rounded-lg ${isToday(day) ? 'bg-accent text-white' : 'text-ink-700 active:bg-base-300'}`}
                             >
-                                {/* Slot Header */}
-                                <div className="flex items-center justify-between px-4 py-2 bg-base-200/50 border-b border-base-300">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-lg">
-                                            {slot === 'Breakfast' ? '🍳' : slot === 'Lunch' ? '🥗' : '🍝'}
-                                        </span>
-                                        <span className="text-xs font-black uppercase tracking-wider text-ink-500">{slot}</span>
-                                    </div>
-                                    <span className="text-[10px] font-bold uppercase tracking-tight text-ink-300 bg-base-300 px-2 py-0.5 rounded">
-                                        {config.id}
-                                    </span>
-                                </div>
+                                <span className="text-[10px] font-semibold uppercase opacity-70">{format(day, 'EEEEE')}</span>
+                                <span className="text-sm font-bold leading-tight">{format(day, 'd')}</span>
+                                <span className={`w-1 h-1 rounded-full mt-0.5 ${planned ? (isToday(day) ? 'bg-white' : 'bg-accent') : 'bg-transparent'}`} />
+                            </button>
+                        );
+                    })}
+                </div>
+                <button onClick={onRequestNextWeek} className="p-2 text-ink-400 active:text-ink-900" aria-label="Next week">
+                    <ChevronRight size={18} />
+                </button>
+            </div>
 
-                                {/* Slot Content */}
-                                <div className="p-4">
-                                    {isEditing ? (
-                                        <div className="space-y-3">
-                                            <PlanEntryForm
-                                                recipes={recipes}
-                                                items={items}
-                                                lists={lists}
-                                                onCreateRecipe={onCreateRecipe}
-                                                onCreateItem={onCreateItem}
-                                                onSubmit={async (draft) => {
-                                                    await onAddEntry(currentDay, slot, config.id, draft);
-                                                    setAddingTo(null);
-                                                }}
-                                            />
-                                            <button
-                                                onClick={() => setAddingTo(null)}
-                                                className="w-full py-2 text-sm font-medium text-ink-500 bg-base-200 rounded-lg hover:bg-base-300 transition-colors"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    ) : hasPlans ? (
-                                        <div className="space-y-2">
-                                            <div className="flex flex-wrap gap-2">
-                                                {slotPlans.map((plan) => (
-                                                    <div
-                                                        key={plan.id}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-base-100 border border-base-300 rounded-full text-sm font-medium text-ink-800"
+            {/* Agenda */}
+            <div className="pb-6">
+                {days.map(day => {
+                    const dateStr = format(day, 'yyyy-MM-dd');
+                    return (
+                        <section
+                            key={dateStr}
+                            ref={el => { if (el) dayRefs.current.set(dateStr, el); else dayRefs.current.delete(dateStr); }}
+                            className="scroll-mt-16"
+                        >
+                            <h2 className={`px-4 pt-5 pb-1.5 text-sm font-bold ${isToday(day) ? 'text-accent' : 'text-ink-900'}`}>
+                                {dayLabel(day)} <span className="font-medium text-ink-400">{format(day, 'd MMM')}</span>
+                            </h2>
+                            <div className="bg-white border-y border-base-300 divide-y divide-base-300">
+                                {rows.map(({ slot, dinerId }) => {
+                                    const entries = plansFor(dateStr, slot, dinerId);
+                                    const add = () => setAddingTo({ date: day, slot, dinerId });
+                                    return (
+                                        <div key={`${slot}-${dinerId}`} className="flex items-start gap-3 pl-4 pr-1 min-h-[2.75rem]">
+                                            <div className="w-[4.5rem] flex-shrink-0 pt-2.5 leading-tight">
+                                                <div className="text-xs font-semibold text-ink-500">{slot}</div>
+                                                {showDiner && <div className="text-[11px] text-ink-300">{dinerId}</div>}
+                                            </div>
+                                            <div className="flex-1 min-w-0 py-1">
+                                                {entries.map(entry => (
+                                                    <button
+                                                        key={entry.id}
+                                                        onClick={() => setOpenEntry(entry)}
+                                                        className="w-full flex items-center gap-2.5 py-1.5 text-left active:opacity-60"
                                                     >
-                                                        <span className="max-w-[140px] truncate">{planEntryLabel(plan)}</span>
-                                                        <button
-                                                            onClick={() => onDeleteMeal(plan.id)}
-                                                            className="p-0.5 rounded-full hover:bg-red-100 hover:text-red-600 transition-colors"
-                                                        >
-                                                            <X size={14} />
-                                                        </button>
-                                                    </div>
+                                                        {entry.entry_type === 'Recipe' ? (
+                                                            <RecipeThumb imageUrl={entry.recipe?.image_url} name={planEntryLabel(entry)} className="w-8 h-8 rounded-md text-xs" />
+                                                        ) : (
+                                                            <span className="w-8 h-8 flex-shrink-0 rounded-md border border-dashed border-base-300" aria-hidden="true" />
+                                                        )}
+                                                        <span className={`truncate text-[15px] ${entry.entry_type === 'Note' ? 'italic text-ink-500' : 'font-medium text-ink-900'}`}>
+                                                            {planEntryLabel(entry)}
+                                                        </span>
+                                                    </button>
                                                 ))}
+                                                {entries.length === 0 && (
+                                                    <button onClick={add} className="w-full h-9" aria-label={`Add to ${slot}, ${format(day, 'EEEE')}`} />
+                                                )}
                                             </div>
                                             <button
-                                                onClick={() => setAddingTo({ date: currentDay, slot, dinerId: config.id })}
-                                                className="w-full py-2 flex items-center justify-center gap-1.5 text-accent text-sm font-medium hover:bg-accent/5 rounded-lg transition-colors"
+                                                onClick={add}
+                                                className="flex-shrink-0 w-11 h-11 flex items-center justify-center text-ink-300 active:text-accent"
+                                                aria-label={`Add another to ${slot}, ${format(day, 'EEEE')}`}
                                             >
-                                                <Plus size={16} />
-                                                <span>Add Another</span>
+                                                <Plus size={18} />
                                             </button>
                                         </div>
-                                    ) : (
-                                        <button
-                                            onClick={() => setAddingTo({ date: currentDay, slot, dinerId: config.id })}
-                                            className="w-full py-4 flex items-center justify-center gap-2 text-ink-300 hover:text-accent border-2 border-dashed border-base-300 rounded-lg hover:border-accent/30 transition-colors"
-                                        >
-                                            <Plus size={18} />
-                                            <span className="text-sm font-medium">Add to Plan</span>
-                                        </button>
-                                    )}
-                                </div>
+                                    );
+                                })}
                             </div>
-                        );
-                    })
-                )}
+                        </section>
+                    );
+                })}
             </div>
+
+            {/* Add sheet */}
+            {/* Tall sheet: keeps the search box near the top so its results open downwards, in view. */}
+            <ResponsiveModal isOpen={!!addingTo} onClose={() => setAddingTo(null)} className="w-full h-[85vh]">
+                {addingTo && (
+                    <div className="px-5 pb-6 sm:pt-5 space-y-4 overflow-y-auto">
+                        <div>
+                            <h3 className="text-lg font-bold text-ink-900">Plan {addingTo.slot.toLowerCase()}</h3>
+                            <p className="text-sm text-ink-500">
+                                {dayLabel(addingTo.date)}, {format(addingTo.date, 'd MMM')}{showDiner ? ` · ${addingTo.dinerId}` : ''}
+                            </p>
+                        </div>
+                        <PlanEntryForm
+                            recipes={recipes}
+                            items={items}
+                            lists={lists}
+                            onCreateRecipe={onCreateRecipe}
+                            onCreateItem={onCreateItem}
+                            onSubmit={async (draft) => {
+                                await onAddEntry(addingTo.date, addingTo.slot, addingTo.dinerId, draft);
+                                setAddingTo(null);
+                            }}
+                        />
+                    </div>
+                )}
+            </ResponsiveModal>
+
+            <PlanEntrySheet entry={openEntry} onClose={() => setOpenEntry(null)} onRemove={onDeleteMeal} />
         </div>
     );
 };

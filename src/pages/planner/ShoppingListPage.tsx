@@ -8,6 +8,7 @@ import { AddItemModal } from '../../components/AddItemModal';
 import { AddFromListModal } from '../../components/AddFromListModal';
 import { List as ListIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { formatAmount } from '../../lib/units';
 
 interface Store { id: string; name: string }
 
@@ -21,7 +22,7 @@ interface ShoppingRow {
     grocery_types: {
         id: string;
         name: string;
-        category?: { name: string } | null;
+        category?: { name: string; sort_order: number | null } | null;
         store?: Store | null;
     } | null;
     meal_plan: { date: string; slot: string; diner_type: string } | null;
@@ -176,6 +177,16 @@ export const ShoppingListPage = () => {
             return acc;
         }, {});
 
+    // Kitchen zones are walked in order (counter → fridge → freezer → pantry …) to tick off what
+    // you already have, so category groups follow the zone's sort_order rather than A–Z.
+    const zoneOrder = new Map<string, number>();
+    for (const it of items) {
+        const cat = it.grocery_types?.category;
+        if (cat) zoneOrder.set(cat.name, cat.sort_order ?? 999);
+    }
+    const compareGroups = (a: string, b: string) =>
+        groupByShop ? a.localeCompare(b) : (zoneOrder.get(a) ?? 999) - (zoneOrder.get(b) ?? 999) || a.localeCompare(b);
+
     const activeGrouped = groupBy(activeAgg, aggGroupKey);
     const inStockGrouped = groupBy(inStockItems, itemGroupKey);
     const orderedGrouped = groupBy(orderedItems, itemGroupKey);
@@ -190,7 +201,7 @@ export const ShoppingListPage = () => {
                 <div className="min-w-0">
                     <div className="flex items-center gap-3 mb-0.5">
                         <h3 className="text-sm font-semibold text-ink-900 truncate">{agg.grocery_types?.name}</h3>
-                        <span className="text-sm font-bold text-accent">{agg.quantity} {agg.unit}</span>
+                        <span className="text-sm font-bold text-accent">{formatAmount(agg.quantity, agg.unit)}</span>
                     </div>
                     <div className="flex items-center gap-2 text-[10px] text-ink-500 font-medium">
                         {agg.sources > 1 ? (
@@ -249,7 +260,7 @@ export const ShoppingListPage = () => {
             <div className="min-w-0">
                 <div className="flex items-center gap-3 mb-0.5">
                     <h3 className="text-sm font-semibold text-ink-900 truncate line-through">{item.grocery_types?.name}</h3>
-                    <span className="text-sm font-bold text-accent">{item.quantity} {item.unit}</span>
+                    <span className="text-sm font-bold text-accent">{formatAmount(Number(item.quantity), item.unit)}</span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-ink-500 font-medium">
                     {item.meal_plan ? (
@@ -323,7 +334,7 @@ export const ShoppingListPage = () => {
                             .sort(([a], [b]) => {
                                 if (a === 'No Preferred Shop') return -1;
                                 if (b === 'No Preferred Shop') return 1;
-                                return a.localeCompare(b);
+                                return compareGroups(a, b);
                             })
                             .map(([groupKey, rows]) => (
                                 <div key={groupKey} className="space-y-1">
@@ -350,7 +361,7 @@ export const ShoppingListPage = () => {
 
                         {inStockExpanded && (
                             <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                                {Object.entries(inStockGrouped).sort(([a], [b]) => a.localeCompare(b)).map(([category, rows]) => (
+                                {Object.entries(inStockGrouped).sort(([a], [b]) => compareGroups(a, b)).map(([category, rows]) => (
                                     <div key={category} className="space-y-1">
                                         <h3 className="text-[9px] font-bold uppercase tracking-tight text-ink-300 px-2 opacity-60">{category}</h3>
                                         <div className="bg-base-200/30 rounded-lg border border-base-300 overflow-hidden">
@@ -375,7 +386,7 @@ export const ShoppingListPage = () => {
 
                         {orderedExpanded && (
                             <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                                {Object.entries(orderedGrouped).sort(([a], [b]) => a.localeCompare(b)).map(([category, rows]) => (
+                                {Object.entries(orderedGrouped).sort(([a], [b]) => compareGroups(a, b)).map(([category, rows]) => (
                                     <div key={category} className="space-y-1">
                                         <h3 className="text-[9px] font-bold uppercase tracking-tight text-ink-300 px-2 opacity-60">{category}</h3>
                                         <div className="bg-base-200/30 rounded-lg border border-base-300 overflow-hidden">

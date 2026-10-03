@@ -17,14 +17,23 @@ create table stores (
   name text not null
 );
 
--- Seed default categories
+-- Seed default categories. These are *kitchen storage zones*, in the order you walk the kitchen
+-- (the Shop list groups by them so you can tick off everything in one place in one pass).
 insert into grocery_categories (name, sort_order) values
-('Produce', 1),
-('Meat & Seafood', 2),
-('Dairy & Eggs', 3),
-('Pantry', 4),
-('Frozen', 5),
-('household', 99);
+('Counter & Fruit Bowl', 1),
+('Fridge: Fruit & Veg', 2),
+('Fridge', 3),
+('Freezer', 4),
+('Pantry: Tins & Jars', 5),
+('Pantry: Grains, Pasta & Cereal', 6),
+('Pantry: Baking', 7),
+('Pantry: Oils, Vinegars & Sauces', 8),
+('Pantry: Nuts, Seeds & Dried Fruit', 9),
+('Pantry: Snacks', 10),
+('Herbs & Spices', 11),
+('Bread & Bakery', 12),
+('Drinks', 13),
+('Other', 99);
 
 -- 2. Grocery Types (the "library" of ingredients/items)
 create table grocery_types (
@@ -63,6 +72,8 @@ create table recipes (
   cook_time_minutes int default 0,
   total_time_mins int default 0,
   web_source text,
+  image_url text,                              -- thumbnail (source page's og:image), hot-linked
+  steps jsonb not null default '[]'::jsonb,    -- cooking cards; see 20261003_recipe_image_and_steps.sql
   category text,
   is_archived boolean default false,
   is_favourite boolean default false
@@ -73,7 +84,7 @@ create table recipe_ingredients (
   recipe_id uuid references recipes(id) on delete cascade,
   grocery_type_id uuid references grocery_types(id),
   quantity numeric default 1,
-  unit text default 'item'
+  unit text default 'item'                     -- canonical SA-metric units: src/lib/units.ts
 );
 create index idx_recipe_ingredients_recipe on recipe_ingredients(recipe_id);
 

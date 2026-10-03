@@ -6,6 +6,7 @@ import { Button } from './ui/Button';
 import { SearchableSelect } from './ui/SearchableSelect';
 import { AddGroceryModal } from './AddGroceryModal';
 import { ResponsiveModal } from './ui/ResponsiveModal';
+import { UNITS, DEFAULT_UNIT } from '../lib/units';
 
 interface AddRecipeModalProps {
     isOpen: boolean;
@@ -94,7 +95,7 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
             id: grocery.id,
             name: grocery.name,
             quantity: 1,
-            unit: 'pcs'
+            unit: DEFAULT_UNIT
         }]);
     };
 
@@ -195,13 +196,14 @@ export const AddRecipeModal = ({ isOpen, onClose, onRecipeCreated }: AddRecipeMo
                                         className="zen-input w-16 h-8 text-sm p-1 text-center"
                                         placeholder="Qty"
                                     />
-                                    <input
-                                        type="text"
+                                    <select
                                         value={ing.unit}
                                         onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
-                                        className="zen-input w-20 h-8 text-sm p-1"
-                                        placeholder="Unit"
-                                    />
+                                        className="zen-input w-24 h-8 text-sm p-1"
+                                        aria-label="Unit"
+                                    >
+                                        {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                    </select>
                                     <button
                                         onClick={() => removeIngredient(idx)}
                                         className="p-1.5 text-ink-400 hover:text-red-500 hover:bg-base-200 rounded-md transition-colors"

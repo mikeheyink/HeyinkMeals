@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '../ui/Button';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { SwipeToDelete } from '../ui/SwipeToDelete';
+import { UNITS, DEFAULT_UNIT } from '../../lib/units';
 
 interface ListItem {
     id: string;
@@ -37,7 +38,7 @@ export function GroceryListItems({
 }: GroceryListItemsProps) {
     const [selectedGrocery, setSelectedGrocery] = useState('');
     const [quantity, setQuantity] = useState(1);
-    const [unit, setUnit] = useState('items');
+    const [unit, setUnit] = useState<string>(DEFAULT_UNIT);
 
     const [error, setError] = useState<string | null>(null);
 
@@ -208,12 +209,14 @@ export function GroceryListItems({
                         min="0.25"
                         step="0.25"
                     />
-                    <input
+                    <select
                         value={unit}
                         onChange={e => setUnit(e.target.value)}
-                        className="zen-input w-20"
-                        placeholder="unit"
-                    />
+                        className="zen-input w-24"
+                        aria-label="Unit"
+                    >
+                        {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
                     <Button
                         size="sm"
                         onClick={handleAdd}

@@ -6,7 +6,7 @@ export interface PlanEntryLike {
     note_text?: string | null;
     quantity?: number | null;
     unit?: string | null;
-    recipe?: { id: string; name: string } | null;
+    recipe?: { id: string; name: string; image_url?: string | null; web_source?: string | null } | null;
     list?: { id: string; name: string } | null;
     item?: { id: string; name: string } | null;
 }

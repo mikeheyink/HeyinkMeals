@@ -3,13 +3,17 @@ import { Plus, X } from 'lucide-react';
 import { Card } from '../ui/Card';
 import type { PlannerConfigItem } from '../../services/preferencesService';
 import { planEntryLabel } from '../../lib/planEntry';
+import { RecipeThumb } from '../recipes/RecipeThumb';
+import type { PlannedEntry } from './PlanEntrySheet';
 
 interface PlannerGridProps {
     days: Date[];
-    plans: any[];
+    plans: PlannedEntry[];
     activeConfigs: PlannerConfigItem[];
     onSelectSlot: (date: Date, mealSlot: string) => void;
     onDeleteMeal: (planId: string) => Promise<void>;
+    /** Open a planned entry's details (photo, source link, cook / remove). */
+    onOpenEntry: (plan: PlannedEntry) => void;
 }
 
 export function PlannerGrid({
@@ -17,7 +21,8 @@ export function PlannerGrid({
     plans,
     activeConfigs,
     onSelectSlot,
-    onDeleteMeal
+    onDeleteMeal,
+    onOpenEntry
 }: PlannerGridProps) {
     const totalActiveSlots = activeConfigs.reduce((sum, c) => sum + c.slots.length, 0);
 
@@ -87,8 +92,23 @@ export function PlannerGrid({
 
                                     const recipesInSlot = slotPlans.map(plan => ({
                                         planId: plan.id,
-                                        name: planEntryLabel(plan)
+                                        name: planEntryLabel(plan),
+                                        plan
                                     }));
+
+                                    const renderName = (plan: PlannedEntry, name: string) => (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onOpenEntry(plan); }}
+                                            className="flex items-center gap-1.5 flex-1 min-w-0 text-left hover:text-accent"
+                                        >
+                                            {plan.entry_type === 'Recipe' && (
+                                                <RecipeThumb imageUrl={plan.recipe?.image_url} name={name} className="w-5 h-5 rounded text-[9px]" />
+                                            )}
+                                            <span className="text-[11px] font-semibold text-ink-900 line-clamp-1 leading-tight">
+                                                {name}
+                                            </span>
+                                        </button>
+                                    );
 
                                     return (
                                         <div
@@ -103,11 +123,9 @@ export function PlannerGrid({
                                                 <div className="h-full flex flex-col justify-between">
                                                     <div className="space-y-1">
                                                         {slotPlans.length <= 2 ? (
-                                                            recipesInSlot.map(({ planId, name }) => (
+                                                            recipesInSlot.map(({ planId, name, plan }) => (
                                                                 <div key={planId} className="flex items-center gap-1 group/chip">
-                                                                    <span className="text-[11px] font-semibold text-ink-900 line-clamp-1 leading-tight flex-1">
-                                                                        {name}
-                                                                    </span>
+                                                                    {renderName(plan, name)}
                                                                     <button
                                                                         onClick={async (e) => {
                                                                             e.stopPropagation();
@@ -123,9 +141,7 @@ export function PlannerGrid({
                                                         ) : (
                                                             <>
                                                                 <div className="flex items-center gap-1 group/chip">
-                                                                    <span className="text-[11px] font-semibold text-ink-900 line-clamp-1 leading-tight flex-1">
-                                                                        {recipesInSlot[0].name}
-                                                                    </span>
+                                                                    {renderName(recipesInSlot[0].plan, recipesInSlot[0].name)}
                                                                     <button
                                                                         onClick={async (e) => {
                                                                             e.stopPropagation();

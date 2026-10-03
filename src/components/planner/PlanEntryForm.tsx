@@ -3,8 +3,7 @@ import { Plus, Star } from 'lucide-react';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { Button } from '../ui/Button';
 import type { PlanEntryDraft, EntryType } from '../../services/plannerService';
-
-const UNITS = ['item', 'kg', 'g', 'l', 'ml', 'cup', 'tbsp', 'tsp', 'pkg'];
+import { UNITS, DEFAULT_UNIT } from '../../lib/units';
 
 // Quick-pick options for notes. Add more here — they appear in the dropdown.
 const NOTE_PRESETS = ['Leftovers', 'Eat Out', "Mark's Meal"];
@@ -62,7 +61,7 @@ export function PlanEntryForm({ recipes, items, lists, onSubmit, onCreateRecipe,
     const [selected, setSelected] = useState('');
     const [servings, setServings] = useState(4);
     const [qty, setQty] = useState(1);
-    const [unit, setUnit] = useState('item');
+    const [unit, setUnit] = useState<string>(DEFAULT_UNIT);
 
     // Inline "Add New" flows (mutually exclusive with a dropdown selection).
     const [addMode, setAddMode] = useState<'none' | 'item' | 'note'>('none');
@@ -103,7 +102,7 @@ export function PlanEntryForm({ recipes, items, lists, onSubmit, onCreateRecipe,
             if (id) {
                 setAddMode('none');
                 setQty(1);
-                setUnit('item');
+                setUnit(DEFAULT_UNIT);
                 setSelected(`Item:${id}`);
             }
         } finally {
