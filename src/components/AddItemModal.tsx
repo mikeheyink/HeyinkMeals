@@ -4,6 +4,7 @@ import { pantryService } from '../services/pantryService';
 import { plannerService } from '../services/plannerService';
 import { Button } from './ui/Button';
 import { ResponsiveModal } from './ui/ResponsiveModal';
+import { UNITS, DEFAULT_UNIT } from '../lib/units';
 
 interface AddItemModalProps {
     isOpen: boolean;
@@ -26,7 +27,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
     const [adding, setAdding] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [quantity, setQuantity] = useState(1);
-    const [unit, setUnit] = useState('item');
+    const [unit, setUnit] = useState<string>(DEFAULT_UNIT);
     const [newItemCategory, setNewItemCategory] = useState<string>('');
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -37,7 +38,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
             loadData();
             setSearch('');
             setQuantity(1);
-            setUnit('item');
+            setUnit(DEFAULT_UNIT);
             setNewItemCategory('');
             setHighlightedIndex(-1);
             setError(null);
@@ -192,15 +193,7 @@ export const AddItemModal = ({ isOpen, onClose, onItemAdded }: AddItemModalProps
                                 onChange={(e) => setUnit(e.target.value)}
                                 className="zen-input w-full"
                             >
-                                <option value="item">item</option>
-                                <option value="kg">kg</option>
-                                <option value="g">g</option>
-                                <option value="l">l</option>
-                                <option value="ml">ml</option>
-                                <option value="cup">cup</option>
-                                <option value="tbsp">tbsp</option>
-                                <option value="tsp">tsp</option>
-                                <option value="pkg">pkg</option>
+                                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                             </select>
                         </div>
                     </div>
