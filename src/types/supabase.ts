@@ -217,7 +217,29 @@ export type Database = {
           plan_type?: string | null
           reference_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "meal_plan_entries_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plan_entries_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "grocery_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plan_entries_item_grocery_type_id_fkey"
+            columns: ["item_grocery_type_id"]
+            isOneToOne: false
+            referencedRelation: "grocery_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       recipe_ingredients: {
         Row: {
@@ -263,6 +285,7 @@ export type Database = {
           cook_time_minutes: number | null
           embedding: string | null
           id: string
+          image_url: string | null
           ingredients_list_id: string | null
           instructions: string | null
           is_archived: boolean | null
@@ -271,6 +294,7 @@ export type Database = {
           category: string | null
           prep_time_minutes: number | null
           servings: number | null
+          steps: Json
           total_time_mins: number | null
           web_source: string | null
         }
@@ -278,6 +302,7 @@ export type Database = {
           cook_time_minutes?: number | null
           embedding?: string | null
           id?: string
+          image_url?: string | null
           ingredients_list_id?: string | null
           instructions?: string | null
           is_archived?: boolean | null
@@ -286,6 +311,7 @@ export type Database = {
           category?: string | null
           prep_time_minutes?: number | null
           servings?: number | null
+          steps?: Json
           total_time_mins?: number | null
           web_source?: string | null
         }
@@ -293,6 +319,7 @@ export type Database = {
           cook_time_minutes?: number | null
           embedding?: string | null
           id?: string
+          image_url?: string | null
           ingredients_list_id?: string | null
           instructions?: string | null
           is_archived?: boolean | null
@@ -301,6 +328,7 @@ export type Database = {
           category?: string | null
           prep_time_minutes?: number | null
           servings?: number | null
+          steps?: Json
           total_time_mins?: number | null
           web_source?: string | null
         }
