@@ -112,18 +112,21 @@ export type Database = {
           created_at: string | null
           id: string
           is_archived: boolean | null
+          kind: string
           name: string
         }
         Insert: {
           created_at?: string | null
           id?: string
           is_archived?: boolean | null
+          kind?: string
           name: string
         }
         Update: {
           created_at?: string | null
           id?: string
           is_archived?: boolean | null
+          kind?: string
           name?: string
         }
         Relationships: []
