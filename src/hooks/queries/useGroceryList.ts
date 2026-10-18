@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groceryListService } from '../../services/groceryListService';
+import type { GroceryListKind } from '../../services/groceryListService';
 
 export const groceryKeys = {
     all: ['groceries'] as const,
@@ -39,6 +40,17 @@ export function useRenameList() {
             groceryListService.renameList(listId, name),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: groceryKeys.all });
+        },
+    });
+}
+
+export function useSetListKind() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ listIds, kind }: { listIds: string[]; kind: GroceryListKind }) =>
+            groceryListService.setListKind(listIds, kind),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: groceryKeys.lists() });
         },
     });
 }

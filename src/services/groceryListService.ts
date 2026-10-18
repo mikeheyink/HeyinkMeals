@@ -1,11 +1,19 @@
 import { supabase } from '../lib/supabase';
 
+/** grocery_lists.kind — what a list is for; drives the grouping on the Lists page. */
+export type GroceryListKind = 'shopping' | 'meal' | 'single';
+
 export interface GroceryListSummary {
     id: string;
     name: string;
+    kind: GroceryListKind;
     created_at: string;
     itemCount: number;
 }
+
+/** Narrows the DB's text column; anything unrecognised is treated as a shopping list. */
+const toListKind = (kind: string): GroceryListKind =>
+    kind === 'meal' || kind === 'single' ? kind : 'shopping';
 
 export const groceryListService = {
     /**
@@ -27,7 +35,7 @@ export const groceryListService = {
     async getLists(): Promise<GroceryListSummary[]> {
         const { data, error } = await supabase
             .from('grocery_lists')
-            .select(`id, name, created_at, items:grocery_list_items(count)`)
+            .select(`id, name, kind, created_at, items:grocery_list_items(count)`)
             .eq('is_archived', false)
             .order('name');
         if (error) throw error;
@@ -37,6 +45,7 @@ export const groceryListService = {
             return {
                 id: list.id,
                 name: list.name,
+                kind: toListKind(list.kind),
                 created_at: list.created_at ?? new Date().toISOString(),
                 itemCount: items?.[0]?.count ?? 0,
             };
@@ -55,6 +64,12 @@ export const groceryListService = {
 
     async renameList(listId: string, name: string) {
         const { error } = await supabase.from('grocery_lists').update({ name }).eq('id', listId);
+        if (error) throw error;
+    },
+
+    /** Moves lists to another type (shopping / meal / single). */
+    async setListKind(listIds: string[], kind: GroceryListKind) {
+        const { error } = await supabase.from('grocery_lists').update({ kind }).in('id', listIds);
         if (error) throw error;
     },
 
