@@ -9,6 +9,8 @@ export interface GroceryListSummary {
     kind: GroceryListKind;
     created_at: string;
     itemCount: number;
+    /** Names of the list's (non-archived) items, A–Z — shown as a preview on the Lists page. */
+    itemNames: string[];
 }
 
 /** Narrows the DB's text column; anything unrecognised is treated as a shopping list. */
@@ -30,24 +32,30 @@ export const groceryListService = {
     },
 
     /**
-     * All (non-archived) lists with their item counts, for the Lists library.
+     * All (non-archived) lists with their item counts and item names, for the Lists library.
+     * Archived items are left out so counts match what the list itself shows.
      */
     async getLists(): Promise<GroceryListSummary[]> {
         const { data, error } = await supabase
             .from('grocery_lists')
-            .select(`id, name, kind, created_at, items:grocery_list_items(count)`)
+            .select(`id, name, kind, created_at, items:grocery_list_items(is_archived, grocery_type:grocery_types(name))`)
             .eq('is_archived', false)
             .order('name');
         if (error) throw error;
 
         return (data ?? []).map(list => {
-            const items = list.items as unknown as { count: number }[];
+            const items = list.items.filter(i => !i.is_archived);
+            const itemNames = items
+                .map(i => i.grocery_type?.name ?? '')
+                .filter(Boolean)
+                .sort((a, b) => a.localeCompare(b));
             return {
                 id: list.id,
                 name: list.name,
                 kind: toListKind(list.kind),
                 created_at: list.created_at ?? new Date().toISOString(),
-                itemCount: items?.[0]?.count ?? 0,
+                itemCount: items.length,
+                itemNames,
             };
         });
     },

@@ -144,7 +144,7 @@ export const ListsPage = () => {
                                 onClick={() => toggleKind(kind.key)}
                             >
                                 {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                                <List size={16} className="text-accent" />
+                                <kind.icon size={16} className="text-accent" />
                                 {kind.label}
                                 <span className="text-ink-400 font-medium ml-auto text-sm">{items.length}</span>
                             </button>
